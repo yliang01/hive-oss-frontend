@@ -1,0 +1,32 @@
+# Maven build output
+target/
+
+# Logs
+*.log
+logs/
+
+# Runtime/temp files
+*.tmp
+*.temp
+*.pid
+*.seed
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Java compiled artifacts
+*.class
+
+# Backup handoff generated files
+handoff/pending/*.sql.gz
+handoff/pending/*.sha256
+handoff/pending/*.manifest.json
