@@ -52,7 +52,12 @@ GET /buckets/{bucket}/files
       "downloadable": true,
       "deletable": true,
       "localPath": "/local/path/file.txt",
-      "localPathExists": true
+      "localPathExists": true,
+      "previewable": true,
+      "previewUrl": "/buckets/ALIBABA_STANDARD/files/preview/example-file-key",
+      "mimeType": "image/jpeg",
+      "previewBlockedReason": null,
+      "previewMaxSizeBytes": 10485760
     }
   ],
   "total": 100,
@@ -91,7 +96,12 @@ GET /buckets/{bucket}/files/search
       "downloadable": true,
       "deletable": true,
       "localPath": "/local/path/file.txt",
-      "localPathExists": true
+      "localPathExists": true,
+      "previewable": true,
+      "previewUrl": "/buckets/ALIBABA_STANDARD/files/preview/example-file-key",
+      "mimeType": "image/jpeg",
+      "previewBlockedReason": null,
+      "previewMaxSizeBytes": 10485760
     }
   ],
   "total": 100,
@@ -133,9 +143,35 @@ GET /buckets/{bucket}/files/{fileKey}
   "downloadable": true,
   "deletable": true,
   "localPath": "/local/path/file.txt",
-  "localPathExists": true
+  "localPathExists": true,
+  "previewable": false,
+  "previewUrl": null,
+  "mimeType": null,
+  "previewBlockedReason": "UNSUPPORTED_TYPE",
+  "previewMaxSizeBytes": 10485760
 }
 ```
+
+### 4.1 预览文件（后端流式解密）
+
+```
+GET /buckets/{bucket}/files/preview/{fileKey}
+```
+
+**请求参数：**
+
+- `bucket`: 桶名称（路径参数）
+- `fileKey`: 文件Key（路径参数）
+
+**响应：**
+
+- 成功: `200 OK`（`Content-Disposition: inline`，返回可被浏览器识别的解密后文件流）
+- 失败:
+  - `404 Not Found`: 文件不存在
+  - `423 Locked`: 文件处于冻结态，需先解冻
+  - `413 Payload Too Large`: 文件超过预览大小限制
+  - `415 Unsupported Media Type`: 文件类型不支持预览
+  - `5xx`: OSS读取或解密失败
 
 **错误响应：**
 

@@ -6,31 +6,35 @@
 
 ## 项目结构
 
+- **frontend-app/**：前端源码与 Vite 构建配置；`npm run build` 输出到 `src/main/resources/static/`。
+- **src/main/resources/static/**：构建产物（或本地开发时可单独用 serve 提供），由 hive-oss 运行时从 classpath 提供。
+
 ```
-hive-oss-frontend/src/main/resources/static/
-├── index.html         # 首页（统一入口：数据库备份与加载、Bucket 选择）
-├── pages/             # 页面文件
-│   └── files.html     # 文件管理页
-├── js/                # JavaScript 文件
-│   ├── home.js        # 首页逻辑（数据库备份/恢复、ACK 轮询、备份列表、Bucket 跳转）
-│   ├── files.js       # 文件管理逻辑
-│   └── utils.js       # 工具函数
-├── css/               # 样式文件
-│   └── style.css      # 自定义样式
-├── serve.json         # 服务器配置（本地开发用）
-└── README.md          # 项目说明
+frontend-app/
+├── index.html, pages/files.html   # 多页入口
+├── js/home.js, files.js, utils.js
+├── css/style.css
+├── public/serve.json
+├── vite.config.js
+└── package.json
+
+static/（构建后）
+├── index.html, pages/files.html
+├── assets/*.js, *.css
+└── serve.json
 ```
 
-## 开发环境
+## 开发与构建
 
 ```bash
-# 在 static 目录下
+# 推荐：在 frontend-app 中开发与构建
+cd frontend-app
+npm install
+npm run dev    # 开发服务器 http://localhost:3000
+npm run build # 产出写入 ../src/main/resources/static/
+
+# 或仅本地预览已构建的 static
 cd src/main/resources/static
-
-# 安装依赖（如果需要）
-npm install -g serve
-
-# 启动开发服务器
 npx serve . --config serve.json
 ```
 
@@ -48,6 +52,14 @@ npx serve . --config serve.json
 ## 接口文档
 
 详见 [API.md](./API.md)。
+
+## 重构后回归清单（人工验证）
+
+在确保逻辑无变更的前提下，建议按下列链路逐项验证行为与 API/轮询一致：
+
+- **首页**：备份（触发 → 轮询 ACK → 完成/失败）、刷新备份列表、恢复（单批次 → 轮询 → 完成/失败）、Bucket 列表刷新、点击 Bucket 跳转文件页。
+- **文件页**：列表加载与分页、搜索与清除、上传（选文件 → 进度 → 成功/失败）、下载（任务 → 轮询 → 下载）、解冻（轮询）、删除、确认删除、远程同步、返回首页。
+- **通用**：通知与确认弹窗的触发与关闭、所有 `window.*` 暴露的入口（如 `handleBackup`、`refreshFileList` 等）与 HTML `onclick` 对应无误。
 
 ## 首页任务状态展示（备份/恢复）
 

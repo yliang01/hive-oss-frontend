@@ -1,11 +1,46 @@
+import '../css/style.css';
 import { formatSize, formatDate, showError, showSuccess, showWarning, showInfo, showConfirm } from './utils.js';
+import { generateFileRowHTML as generateFileRowHTMLView, buildExpandedDetailRow as buildExpandedDetailRowView } from './views/files-views.js';
 
 const API_BASE = 'http://localhost:8080';
 const pageSize = 50;
 let currentPage = 1;
 let totalFiles = 0;
 let currentBucket = '';
-let currentSearchKeyword = ''; // 新增：当前搜索关键词
+let currentSearchKeyword = ''; // 当前搜索关键词
+
+let expandedFileKey = null; // 当前展开详情的行（同一时间只展开一行）
+let previewModalInstance = null;
+
+function getRowByFileKey(fileKey) {
+  const tbody = document.querySelector('#file-table tbody');
+  if (!tbody) return null;
+  for (const tr of tbody.querySelectorAll('tr[data-filekey]')) {
+    if (tr.getAttribute('data-filekey') === fileKey) return tr;
+  }
+  return null;
+}
+
+function getDownloadButtonByFileKey(fileKey) {
+  const row = getRowByFileKey(fileKey);
+  return row ? row.querySelector('.download-btn') : null;
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  const s = String(str);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function escapeHtmlAttr(str) {
+  if (str == null) return '';
+  return escapeHtml(str);
+}
+
+function escapeJsString(str) {
+  if (str == null) return '';
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+}
 
 // 获取当前 bucket
 function getCurrentBucket() {
@@ -39,9 +74,22 @@ function refreshSingleFile(fileKey) {
 
 // 新增：更新文件行内容
 function updateFileRow(fileKey, fileData) {
-  const row = document.querySelector(`tr[data-filekey="${fileKey}"]`);
-  if (row) {
-    row.innerHTML = generateFileRowHTML(fileData);
+  const tbody = document.querySelector('#file-table tbody');
+  if (!tbody) return;
+  let row = null;
+  for (const tr of tbody.querySelectorAll('tr[data-filekey]')) {
+    if (tr.getAttribute('data-filekey') === fileKey) { row = tr; break; }
+  }
+  if (!row) return;
+  row.innerHTML = generateFileRowHTML(fileData);
+  const next = row.nextElementSibling;
+  if (next && next.classList && next.classList.contains('row-expand-panel-row')) {
+    const td = next.querySelector('td.row-expand-panel');
+    if (td) {
+      td.innerHTML = buildExpandedDetailRow(fileData);
+      td.querySelectorAll('.copy-file-name-btn').forEach(btn => btn.addEventListener('click', () => copyFileNameFromPanel(btn)));
+      td.querySelectorAll('.copy-file-key-btn').forEach(btn => btn.addEventListener('click', () => copyFileKeyFromPanel(btn)));
+    }
   }
 }
 
@@ -75,32 +123,77 @@ function addNewFileToTop(fileData) {
   }, 2000);
 }
 
-// 新增：生成文件行HTML
+function buildExpandedDetailRow(file) {
+  return buildExpandedDetailRowView(file, currentSearchKeyword);
+}
+
+/** 切换行展开详情：同一时间只展开一行 */
+function toggleExpandDetail(fileKey) {
+  const tbody = document.querySelector('#file-table tbody');
+  if (!tbody) return;
+  let row = null;
+  for (const tr of tbody.querySelectorAll('tr[data-filekey]')) {
+    if (tr.getAttribute('data-filekey') === fileKey) { row = tr; break; }
+  }
+  if (!row) return;
+  const next = row.nextElementSibling;
+  const isExpandRow = next && next.classList && next.classList.contains('row-expand-panel-row');
+  if (isExpandRow) {
+    next.remove();
+    expandedFileKey = null;
+    return;
+  }
+  // 关闭其他展开行
+  const prevExpand = tbody.querySelector('tr.row-expand-panel-row');
+  if (prevExpand) prevExpand.remove();
+  expandedFileKey = fileKey;
+  const file = (window.allFiles && window.allFiles.find(f => f.fileKey === fileKey)) || { fileKey, fileName: '' };
+  const td = document.createElement('td');
+  td.colSpan = 8;
+  td.className = 'row-expand-panel';
+  td.innerHTML = buildExpandedDetailRow(file);
+  const tr = document.createElement('tr');
+  tr.className = 'row-expand-panel-row';
+  tr.appendChild(td);
+  row.parentNode.insertBefore(tr, row.nextSibling);
+  // 绑定复制按钮
+  td.querySelectorAll('.copy-file-name-btn').forEach(btn => {
+    btn.addEventListener('click', () => copyFileNameFromPanel(btn));
+  });
+  td.querySelectorAll('.copy-file-key-btn').forEach(btn => {
+    btn.addEventListener('click', () => copyFileKeyFromPanel(btn));
+  });
+}
+
+function copyFileNameFromPanel(btn) {
+  const panel = btn.closest('.row-expand-content');
+  if (!panel) return;
+  const name = panel.getAttribute('data-file-name') || '';
+  copyToClipboardWithFeedback(name, btn, '已复制');
+}
+
+function copyFileKeyFromPanel(btn) {
+  const panel = btn.closest('.row-expand-content');
+  if (!panel) return;
+  const key = panel.getAttribute('data-file-key') || '';
+  copyToClipboardWithFeedback(key, btn, '已复制');
+}
+
+function copyToClipboardWithFeedback(text, buttonEl, doneText) {
+  navigator.clipboard.writeText(text).then(() => {
+    showSuccess(doneText);
+    const orig = buttonEl.textContent;
+    buttonEl.textContent = doneText;
+    buttonEl.classList.add('copy-btn-done');
+    setTimeout(() => {
+      buttonEl.textContent = orig;
+      buttonEl.classList.remove('copy-btn-done');
+    }, 1200);
+  }).catch(() => showError('复制失败'));
+}
+
 function generateFileRowHTML(file) {
-  return `
-    <td class="filename-cell" title="${file.fileName}">${file.fileName}</td>
-    <td class="filekey-cell" title="${file.fileKey}">${file.fileKey}</td>
-    <td>${file.zipped ? '是' : '否'}</td>
-    <td>${formatSize(file.size)}</td>
-    <td>${file.status}</td>
-    <td>${formatDate(file.updateTime)}</td>
-    <td>${file.unfreezeTime ? formatDate(file.unfreezeTime) : '-'}</td>
-    <td>
-      <div class="d-flex flex-row align-items-center mb-1 gap-2">
-        <button class='btn btn-sm btn-warning' onclick="unfreezeFile('${file.fileKey}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
-        <button class="btn btn-sm btn-primary download-btn" data-filekey="${file.fileKey}" onclick="downloadFile('${file.fileKey}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteFile('${file.fileKey}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
-      </div>
-      <div class="d-flex flex-row align-items-center gap-2">
-        ${file.localPath ? `<button class='btn btn-outline-secondary btn-sm' onclick='copyLocalPath("${file.localPath}")' title='复制本地路径'>复制路径</button>` : ''}
-        ${file.localPath ? `<button class='btn btn-outline-danger btn-sm' onclick='releaseLocalFile("${file.fileKey}", "${file.localPath}")' title='释放本地文件'>释放本地</button>` : ''}
-        ${file.localPath ? `<span class="ms-1" title="${file.localPathExists === undefined ? '未知' : (file.localPathExists ? '本地文件存在' : '本地文件不存在')}">
-          ${file.localPathExists === undefined ? '' : (file.localPathExists ? '<span style=\'color:green;font-size:1.2em;\'>&#10003;</span>' : `<span style=\'color:red;font-size:1.2em;cursor:pointer;\' onclick=\'handleLocalPathMissingDownload("${file.fileKey}")\'>&#10007;</span>`)}
-        </span>` : ''}
-        <span class="download-progress text-info small" id="download-progress-${file.fileKey}"></span>
-      </div>
-    </td>
-  `;
+  return generateFileRowHTMLView(file, currentSearchKeyword);
 }
 
 // 渲染文件列表
@@ -118,9 +211,9 @@ function renderFiles(files) {
 
   if (!files.length) {
     if (currentSearchKeyword.trim()) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary">未找到包含"${currentSearchKeyword}"的文件</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-secondary">未找到包含"${escapeHtml(currentSearchKeyword)}"的文件</td></tr>`;
     } else {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary">暂无文件</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-secondary">暂无文件</td></tr>';
     }
     return;
   }
@@ -145,7 +238,7 @@ function listFiles() {
   
   // 添加loading状态
   const tbody = document.querySelector('#file-table tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center">加载中...</td></tr>';
   
   // 构建API URL
   let apiUrl = `${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`;
@@ -293,8 +386,7 @@ function downloadFile(fileKey) {
     showError('未指定 bucket');
     return;
   }
-  // 优化按钮选择器，避免依赖onclick字符串
-  const btn = document.querySelector(`.download-btn[data-filekey="${fileKey}"]`);
+  const btn = getDownloadButtonByFileKey(fileKey);
   if (btn) {
     btn.disabled = true;
     btn.textContent = '下载准备中...';
@@ -385,10 +477,113 @@ function triggerBrowserDownload(url, fileKey) {
   setTimeout(() => document.body.removeChild(a), 100);
 }
 
+function getPreviewBlockedMessage(blockedReason) {
+  switch (blockedReason) {
+    case 'FROZEN':
+      return '文件未解冻，暂不可预览';
+    case 'TOO_LARGE':
+      return '文件过大，暂不支持预览';
+    case 'UNSUPPORTED_TYPE':
+      return '当前文件类型不支持预览';
+    default:
+      return '文件不可预览';
+  }
+}
+
+function buildPreviewUrl(rawUrl) {
+  if (!rawUrl) return '';
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    return rawUrl;
+  }
+  return `${API_BASE}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+}
+
+function inferMimeTypeFromFile(file) {
+  if (file && file.mimeType) return file.mimeType;
+  const fileName = file && file.fileName ? String(file.fileName).toLowerCase() : '';
+  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) return 'image/jpeg';
+  if (fileName.endsWith('.png')) return 'image/png';
+  if (fileName.endsWith('.gif')) return 'image/gif';
+  if (fileName.endsWith('.webp')) return 'image/webp';
+  if (fileName.endsWith('.pdf')) return 'application/pdf';
+  if (fileName.endsWith('.txt') || fileName.endsWith('.log') || fileName.endsWith('.csv') || fileName.endsWith('.json') || fileName.endsWith('.xml')) return 'text/plain';
+  return '';
+}
+
+function clearPreviewModalContent() {
+  const container = document.getElementById('previewModalContent');
+  if (container) {
+    container.innerHTML = '';
+  }
+}
+
+function ensurePreviewModalInit() {
+  const modalEl = document.getElementById('previewModal');
+  if (!modalEl || previewModalInstance) return;
+  previewModalInstance = new bootstrap.Modal(modalEl);
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    clearPreviewModalContent();
+  });
+}
+
+function openPreviewModal(file) {
+  ensurePreviewModalInit();
+  const modalEl = document.getElementById('previewModal');
+  const titleEl = document.getElementById('previewModalLabel');
+  const contentEl = document.getElementById('previewModalContent');
+  if (!modalEl || !titleEl || !contentEl || !previewModalInstance) {
+    showError('预览弹窗初始化失败');
+    return;
+  }
+
+  const previewUrl = buildPreviewUrl(file.previewUrl);
+  const mimeType = inferMimeTypeFromFile(file);
+  titleEl.innerHTML = `<i class="bi bi-eye text-primary"></i> 文件预览 - ${escapeHtml(file.fileName || file.fileKey || '')}`;
+
+  if (mimeType.startsWith('image/')) {
+    contentEl.innerHTML = `<img class="preview-image" src="${escapeHtmlAttr(previewUrl)}" alt="${escapeHtmlAttr(file.fileName || file.fileKey || 'preview-image')}">`;
+  } else if (mimeType === 'application/pdf' || mimeType.startsWith('text/')) {
+    contentEl.innerHTML = `<iframe class="preview-frame" src="${escapeHtmlAttr(previewUrl)}" title="${escapeHtmlAttr(file.fileName || file.fileKey || 'preview-frame')}"></iframe>`;
+  } else {
+    contentEl.innerHTML = `
+      <div class="alert alert-warning mb-0">
+        当前文件类型暂不支持弹窗预览，请下载后查看。
+      </div>
+    `;
+  }
+
+  previewModalInstance.show();
+}
+
+function previewFile(fileKey) {
+  if (!fileKey) {
+    showError('未指定文件key');
+    return;
+  }
+  const file = getFileByKey(fileKey);
+  if (!file) {
+    showError('未找到文件信息，请先刷新列表');
+    return;
+  }
+  if (!file.previewable || !file.previewUrl) {
+    showWarning(getPreviewBlockedMessage(file.previewBlockedReason));
+    return;
+  }
+  openPreviewModal(file);
+}
+
 // 下载进度展示（可自定义UI，这里简单用alert和console）
 function showDownloadProgress(msg, fileKey) {
-  // 在对应行的下载按钮右侧显示进度
-  const span = document.getElementById(`download-progress-${fileKey}`);
+  const tbody = document.querySelector('#file-table tbody');
+  let span = null;
+  if (tbody) {
+    for (const tr of tbody.querySelectorAll('tr[data-filekey]')) {
+      if (tr.getAttribute('data-filekey') === fileKey) {
+        span = tr.querySelector('.download-progress');
+        break;
+      }
+    }
+  }
   if (!span) return;
   span.textContent = msg;
   // 下载成功或失败时自动清空
@@ -486,7 +681,8 @@ function syncRemoteFiles() {
 
 // 解冻文件
 function unfreezeFile(fileKey) {
-  const btn = document.querySelector(`button[onclick="unfreezeFile('${fileKey}')"]`);
+  const row = getRowByFileKey(fileKey);
+  const btn = row ? row.querySelector('.unfreeze-btn') : null;
   if (!btn) return;
   btn.disabled = true;
   const originalText = btn.textContent;
@@ -605,14 +801,24 @@ function getFileByKey(fileKey) {
 }
 
 // 新增：处理本地文件不存在时的重新下载逻辑
-function handleLocalPathMissingDownload(fileKey) {
+function handleLocalPathMissingDownload(fileKeyOrEl) {
+  const fileKey = (fileKeyOrEl && typeof fileKeyOrEl.getAttribute === 'function')
+    ? fileKeyOrEl.getAttribute('data-filekey') : fileKeyOrEl;
+  if (!fileKey) return;
   showConfirm('本地文件不存在，是否重新下载？', () => {
-    // 让下载按钮可用（无视downloadable）
-    const btn = document.querySelector(`.download-btn[data-filekey="${fileKey}"]`);
+    const tbody = document.querySelector('#file-table tbody');
+    let btn = null;
+    if (tbody) {
+      for (const tr of tbody.querySelectorAll('tr[data-filekey]')) {
+        if (tr.getAttribute('data-filekey') === fileKey) {
+          btn = tr.querySelector('.download-btn');
+          break;
+        }
+      }
+    }
     if (btn) {
       btn.disabled = false;
       btn.removeAttribute('title');
-      // 立即触发下载
       downloadFile(fileKey);
     }
   });
@@ -901,13 +1107,15 @@ function refreshFileList() {
   });
 }
 
+window.toggleExpandDetail = toggleExpandDetail;
 window.backToBuckets = backToBuckets;
-window.listFiles = listFiles; // 新增：暴露文件列表刷新函数
+window.listFiles = listFiles;
 window.refreshFileList = refreshFileList; // 新增：暴露带动画的刷新函数
 window.performSearch = performSearch; // 新增：暴露搜索函数
 window.clearSearch = clearSearch; // 新增：暴露清除搜索函数
 window.handleSearchKeyPress = handleSearchKeyPress; // 新增：暴露搜索按键处理函数
 window.downloadFile = downloadFile;
+window.previewFile = previewFile;
 window.deleteFile = deleteFile;
 window.changePage = changePage;
 window.confirmDeleteFiles = confirmDeleteFiles;
@@ -924,4 +1132,7 @@ window.openUploadModal = openUploadModal; // 新增：暴露上传模态框函�
 window.clearFileSelection = clearFileSelection; // 新增：暴露清除文件选择函数
 window.uploadFile = uploadFile; // 新增：暴露上传文件函数
 
-window.onload = listFiles;
+window.onload = () => {
+  ensurePreviewModalInit();
+  listFiles();
+};

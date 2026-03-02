@@ -1,10 +1,8 @@
-import { showError, showInfo, showSuccess } from './utils.js';
+import '../css/style.css';
+import { showConfirm, showError, showInfo, showSuccess } from './utils.js';
+import { renderTaskStatus, buildBackupListItemHTML, renderBucketsList } from './views/home-views.js';
 
 const API_BASE = 'http://localhost:8080';
-const TASK_TYPE_TEXT = {
-  BACKUP: '数据库备份',
-  RESTORE: '数据库恢复'
-};
 
 const PHASE_TEXT = {
   SUBMITTING: '提交任务中',
@@ -16,76 +14,20 @@ const PHASE_TEXT = {
 };
 
 let restoreInProgress = false;
-
-function formatLocalTime(date) {
-  return date.toLocaleTimeString('zh-CN', { hour12: false });
-}
-
-function renderTaskStatus(options) {
-  const {
-    visible = true,
-    taskType = '-',
-    batchId = '-',
-    phase = '',
-    detail = '',
-    pollAttempts = 0,
-    elapsedSeconds = 0,
-    state = 'running'
-  } = options || {};
-
-  const panelEl = document.getElementById('backup-ack-status');
-  const badgeEl = document.getElementById('backup-status-badge');
-  const updatedAtEl = document.getElementById('backup-status-updated-at');
-  const typeEl = document.getElementById('backup-task-type');
-  const batchEl = document.getElementById('backup-task-batch-id');
-  const phaseEl = document.getElementById('backup-task-phase');
-  const detailRowEl = document.getElementById('backup-task-detail-row');
-  const detailEl = document.getElementById('backup-task-detail');
-  const attemptsEl = document.getElementById('backup-task-poll-attempts');
-  const elapsedEl = document.getElementById('backup-task-elapsed');
-  if (!panelEl || !badgeEl || !updatedAtEl || !typeEl || !batchEl || !phaseEl || !detailRowEl || !detailEl || !attemptsEl || !elapsedEl) {
-    return;
-  }
-
-  panelEl.style.display = visible ? 'block' : 'none';
-  panelEl.classList.remove('is-running', 'is-success', 'is-failed');
-  badgeEl.classList.remove('text-bg-secondary', 'text-bg-primary', 'text-bg-success', 'text-bg-danger');
-
-  if (state === 'success') {
-    panelEl.classList.add('is-success');
-    badgeEl.classList.add('text-bg-success');
-    badgeEl.textContent = '已完成';
-  } else if (state === 'failed') {
-    panelEl.classList.add('is-failed');
-    badgeEl.classList.add('text-bg-danger');
-    badgeEl.textContent = '失败';
-  } else {
-    panelEl.classList.add('is-running');
-    badgeEl.classList.add('text-bg-primary');
-    badgeEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>进行中';
-  }
-
-  typeEl.textContent = TASK_TYPE_TEXT[taskType] || taskType;
-  batchEl.textContent = batchId || '-';
-  phaseEl.textContent = phase || '-';
-  updatedAtEl.textContent = `更新时间：${formatLocalTime(new Date())}`;
-  attemptsEl.textContent = `轮询 ${pollAttempts} 次`;
-  elapsedEl.textContent = `已耗时 ${elapsedSeconds} 秒`;
-
-  const normalizedDetail = (detail || '').trim();
-  if (normalizedDetail) {
-    detailEl.textContent = normalizedDetail;
-    detailRowEl.style.display = 'block';
-  } else {
-    detailEl.textContent = '';
-    detailRowEl.style.display = 'none';
-  }
-}
+let deleteInProgress = false;
+const backupItemsByBatchId = new Map();
 
 function setRestoreButtonsDisabled(disabled) {
   const buttons = document.querySelectorAll('.restore-btn');
   buttons.forEach(btn => {
     btn.disabled = disabled || btn.dataset.restoreAvailable !== '1';
+  });
+}
+
+function setDeleteButtonsDisabled(disabled) {
+  const buttons = document.querySelectorAll('.delete-backup-btn');
+  buttons.forEach(btn => {
+    btn.disabled = disabled || btn.dataset.deleteAvailable !== '1';
   });
 }
 
@@ -226,6 +168,7 @@ function loadBackupList() {
   const listEl = document.getElementById('backup-list');
   const emptyEl = document.getElementById('backup-list-empty');
   if (!listEl) return;
+  backupItemsByBatchId.clear();
   listEl.innerHTML = '';
   if (emptyEl) emptyEl.textContent = '加载中…';
   fetch(`${API_BASE}/db-backup/backups`)
@@ -242,31 +185,34 @@ function loadBackupList() {
         }
         return;
       }
-      data.items.forEach(item => {
+      const sortedItems = [...data.items].sort((a, b) => {
+        const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+      sortedItems.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
-        const created = item.createdAt ? new Date(item.createdAt).toLocaleString() : '-';
         const canRestore = item.status === 'UPLOADED';
-        li.innerHTML = `
-          <div class="small">
-            <span class="fw-bold">${item.batchId || '-'}</span>
-            <span class="text-muted"> ${item.database || ''}</span>
-            <span class="badge bg-secondary ms-1">${item.status || '-'}</span>
-            <br><span class="text-muted">${created}</span>
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary restore-btn"
-            data-restore-available="${canRestore ? '1' : '0'}"
-            ${!canRestore || restoreInProgress ? 'disabled' : ''}
-            onclick="handleRestore('${(item.batchId || '').replace(/'/g, "\\'")}')"
-          >
-            恢复
-          </button>
-        `;
+        const isLatest = index === 0;
+        const canDelete = !isLatest;
+        const batchIdEscaped = (item.batchId || '').replace(/'/g, "\\'");
+        li.innerHTML = buildBackupListItemHTML(
+          item,
+          canRestore,
+          restoreInProgress,
+          batchIdEscaped,
+          canDelete,
+          deleteInProgress,
+          isLatest
+        );
+        if (item.batchId) {
+          backupItemsByBatchId.set(item.batchId, { ...item, isLatest });
+        }
         listEl.appendChild(li);
       });
       setRestoreButtonsDisabled(restoreInProgress);
+      setDeleteButtonsDisabled(restoreInProgress || deleteInProgress);
     })
     .catch(e => {
       showError(e.message);
@@ -277,10 +223,70 @@ function loadBackupList() {
     });
 }
 
+function handleDeleteBackup(batchId) {
+  if (!batchId) return;
+  if (restoreInProgress || deleteInProgress) return;
+  const item = backupItemsByBatchId.get(batchId);
+  if (item?.isLatest) {
+    showInfo('最新备份不可删除');
+    return;
+  }
+  const createdText = item?.createdAt ? new Date(item.createdAt).toLocaleString() : '-';
+  const message = `
+    确认删除该备份吗？<br>
+    <span class="text-muted small">批次：${batchId}<br>时间：${createdText}</span><br><br>
+    删除后将移除该备份的 3 个文件：archive / checksum / manifest。
+  `;
+  showConfirm(message, () => {
+    doDeleteBackup(batchId);
+  });
+}
+
+function doDeleteBackup(batchId) {
+  deleteInProgress = true;
+  setDeleteButtonsDisabled(true);
+  setRestoreButtonsDisabled(true);
+  fetch(`${API_BASE}/db-backup/${encodeURIComponent(batchId)}`, { method: 'DELETE' })
+    .then(async (res) => {
+      if (res.status === 404) throw new Error('备份不存在');
+      if (res.status === 409) {
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (_) {
+          data = null;
+        }
+        throw new Error(data?.message || '最新备份不可删除');
+      }
+      if (!res.ok) {
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (_) {
+          data = null;
+        }
+        throw new Error(data?.message || '删除备份失败');
+      }
+    })
+    .then(() => {
+      showSuccess('备份删除成功');
+      loadBackupList();
+    })
+    .catch((e) => {
+      showError(e.message || '删除备份失败');
+    })
+    .finally(() => {
+      deleteInProgress = false;
+      setRestoreButtonsDisabled(restoreInProgress);
+      setDeleteButtonsDisabled(restoreInProgress || deleteInProgress);
+    });
+}
+
 function handleRestore(batchId) {
   if (!batchId) return;
   restoreInProgress = true;
   setRestoreButtonsDisabled(true);
+  setDeleteButtonsDisabled(true);
   const startedAt = Date.now();
   renderTaskStatus({
     taskType: 'RESTORE',
@@ -312,9 +318,11 @@ function handleRestore(batchId) {
         loadBackupList();
         restoreInProgress = false;
         setRestoreButtonsDisabled(false);
+        setDeleteButtonsDisabled(deleteInProgress);
       }, () => {
         restoreInProgress = false;
         setRestoreButtonsDisabled(false);
+        setDeleteButtonsDisabled(deleteInProgress);
       }, startedAt);
     })
     .catch(e => {
@@ -329,6 +337,7 @@ function handleRestore(batchId) {
       });
       restoreInProgress = false;
       setRestoreButtonsDisabled(false);
+      setDeleteButtonsDisabled(deleteInProgress);
     });
 }
 
@@ -415,22 +424,7 @@ function navigateToFiles(bucket) {
 
 function renderBuckets(buckets) {
   const ul = document.getElementById('buckets');
-  if (!ul) return;
-  ul.innerHTML = '';
-
-  if (!buckets.length) {
-    ul.innerHTML = '<li class="list-group-item text-center text-secondary">暂无 Bucket</li>';
-    return;
-  }
-
-  buckets.forEach(bucket => {
-    const li = document.createElement('li');
-    li.textContent = bucket;
-    li.className = 'list-group-item list-group-item-action';
-    li.style.cursor = 'pointer';
-    li.addEventListener('click', () => navigateToFiles(bucket));
-    ul.appendChild(li);
-  });
+  renderBucketsList(ul, buckets, navigateToFiles);
 }
 
 function listBuckets() {
@@ -467,6 +461,7 @@ function onPageLoad() {
 
 window.handleBackup = handleBackup;
 window.handleRestore = handleRestore;
+window.handleDeleteBackup = handleDeleteBackup;
 window.loadBackupList = loadBackupList;
 window.refreshBuckets = refreshBuckets;
 window.onload = onPageLoad;
