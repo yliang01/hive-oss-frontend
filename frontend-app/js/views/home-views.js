@@ -1,5 +1,5 @@
 /**
- * 首页展示层：任务状态面板、备份列表项、Bucket 列表的 DOM 渲染。
+ * 首页展示层：任务状态面板、备份列表项、分类列表的 DOM 渲染。
  * 逻辑与 API 调用保留在 home.js。
  */
 
@@ -90,7 +90,7 @@ export function buildBackupListItemHTML(item, canRestore, restoreInProgress, bat
     <div class="d-flex gap-2">
       <button
         type="button"
-        class="btn btn-sm btn-outline-primary restore-btn"
+        class="btn btn-sm btn-ui-compact btn-outline-primary restore-btn"
         data-restore-available="${canRestore ? '1' : '0'}"
         ${!canRestore || restoreInProgress ? 'disabled' : ''}
         onclick="handleRestore('${batchIdEscaped}')"
@@ -99,7 +99,7 @@ export function buildBackupListItemHTML(item, canRestore, restoreInProgress, bat
       </button>
       <button
         type="button"
-        class="btn btn-sm btn-outline-danger delete-backup-btn"
+        class="btn btn-sm btn-ui-compact btn-outline-danger delete-backup-btn"
         data-delete-available="${canDelete ? '1' : '0'}"
         title="${deleteTitle}"
         ${deleteDisabled ? 'disabled' : ''}
@@ -111,19 +111,27 @@ export function buildBackupListItemHTML(item, canRestore, restoreInProgress, bat
   `;
 }
 
-export function renderBucketsList(containerEl, buckets, onBucketClick) {
+export function renderCategoryList(containerEl, categories, onCategoryClick) {
   if (!containerEl) return;
   containerEl.innerHTML = '';
-  if (!buckets.length) {
-    containerEl.innerHTML = '<li class="list-group-item text-center text-secondary">暂无 Bucket</li>';
+  if (!categories.length) {
+    containerEl.innerHTML = '<li class="list-group-item text-center text-secondary">暂无分类</li>';
     return;
   }
-  buckets.forEach(bucket => {
+  categories.forEach(category => {
     const li = document.createElement('li');
-    li.textContent = bucket;
+    li.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-semibold">${category.name || category.code || '-'}</div>
+          <div class="text-muted small">${category.description || ''}</div>
+        </div>
+        <span class="badge text-bg-light">${category.code || '-'}</span>
+      </div>
+    `;
     li.className = 'list-group-item list-group-item-action';
     li.style.cursor = 'pointer';
-    li.addEventListener('click', () => onBucketClick(bucket));
+    li.addEventListener('click', () => onCategoryClick(category));
     containerEl.appendChild(li);
   });
 }

@@ -26,10 +26,10 @@
                     <div class="card-body home-card__body">
                         <p class="home-card__desc text-muted small">备份数据库到 OSS（加密），或从备份恢复</p>
                         <div class="home-actions">
-                            <button type="button" class="btn btn-primary" id="backup-btn" onclick="handleBackup()">
+                            <button type="button" class="btn btn-primary btn-ui-primary" id="backup-btn" onclick="handleBackup()">
                                 <i class="bi bi-cloud-upload" aria-hidden="true"></i> 开始备份
                             </button>
-                            <button type="button" class="btn btn-outline-primary" onclick="loadBackupList()">
+                            <button type="button" class="btn btn-outline-primary btn-ui-secondary" onclick="loadBackupList()">
                                 <i class="bi bi-list-ul" aria-hidden="true"></i> 刷新备份列表
                             </button>
                         </div>
@@ -54,17 +54,22 @@
                     </div>
                 </div>
             </section>
-            <!-- Bucket 选择 -->
+            <!-- 文件分类 -->
             <section class="col-12 col-lg-6">
                 <div class="card home-card">
                     <div class="card-header home-card__header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <h2 class="home-card__title mb-0"><i class="bi bi-bucket me-2" aria-hidden="true"></i>Bucket 选择</h2>
-                        <button type="button" class="btn btn-outline-secondary btn-sm refresh-btn" id="refresh-btn" onclick="refreshBuckets()">
-                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> 刷新
-                        </button>
+                        <h2 class="home-card__title mb-0"><i class="bi bi-grid-3x3-gap me-2" aria-hidden="true"></i>文件分类</h2>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-dark btn-ui-compact" onclick="goCategoryAdmin()">
+                                <i class="bi bi-sliders" aria-hidden="true"></i> 分类管理
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-ui-compact refresh-btn" id="refresh-btn" onclick="refreshCategories()">
+                                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> 刷新
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body home-card__body">
-                        <ul id="buckets" class="list-group list-group-flush bucket-list"></ul>
+                        <ul id="categories" class="list-group list-group-flush bucket-list"></ul>
                     </div>
                 </div>
             </section>

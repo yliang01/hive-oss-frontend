@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         files: 'pages/files.html',
+        categoryAdmin: 'pages/category-admin.html',
       },
     },
     assetsDir: 'assets',

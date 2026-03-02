@@ -1,6 +1,6 @@
 import '../css/style.css';
 import { showConfirm, showError, showInfo, showSuccess } from './utils.js';
-import { renderTaskStatus, buildBackupListItemHTML, renderBucketsList } from './views/home-views.js';
+import { renderTaskStatus, buildBackupListItemHTML, renderCategoryList } from './views/home-views.js';
 
 const API_BASE = 'http://localhost:8080';
 
@@ -417,36 +417,36 @@ function pollRestoreAck(batchId, onRestored, onEnd, startedAt) {
   poll();
 }
 
-// --- Bucket 选择 ---
-function navigateToFiles(bucket) {
-  window.location.href = window.location.origin + '/pages/files.html?bucket=' + encodeURIComponent(bucket);
+// --- 分类选择 ---
+function navigateToFiles(category) {
+  window.location.href = window.location.origin + '/pages/files.html?category=' + encodeURIComponent(category.code);
 }
 
-function renderBuckets(buckets) {
-  const ul = document.getElementById('buckets');
-  renderBucketsList(ul, buckets, navigateToFiles);
+function renderCategories(categories) {
+  const ul = document.getElementById('categories');
+  renderCategoryList(ul, categories, navigateToFiles);
 }
 
-function listBuckets() {
-  return fetch(`${API_BASE}/buckets`)
+function listCategories() {
+  return fetch(`${API_BASE}/categories`)
     .then(res => {
-      if (!res.ok) throw new Error('获取 bucket 失败');
+      if (!res.ok) throw new Error('获取分类失败');
       return res.json();
     })
-    .then(renderBuckets)
+    .then(renderCategories)
     .catch(e => {
       showError(e.message);
       throw e;
     });
 }
 
-function refreshBuckets() {
+function refreshCategories() {
   const refreshBtn = document.getElementById('refresh-btn');
   if (refreshBtn) {
     refreshBtn.disabled = true;
     refreshBtn.classList.add('spinning');
   }
-  listBuckets().finally(() => {
+  listCategories().finally(() => {
     if (refreshBtn) {
       refreshBtn.disabled = false;
       refreshBtn.classList.remove('spinning');
@@ -455,13 +455,18 @@ function refreshBuckets() {
 }
 
 function onPageLoad() {
-  refreshBuckets();
+  refreshCategories();
   loadBackupList();
+}
+
+function goCategoryAdmin() {
+  window.location.href = window.location.origin + '/pages/category-admin.html';
 }
 
 window.handleBackup = handleBackup;
 window.handleRestore = handleRestore;
 window.handleDeleteBackup = handleDeleteBackup;
 window.loadBackupList = loadBackupList;
-window.refreshBuckets = refreshBuckets;
+window.refreshCategories = refreshCategories;
+window.goCategoryAdmin = goCategoryAdmin;
 window.onload = onPageLoad;

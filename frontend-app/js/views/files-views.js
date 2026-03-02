@@ -7,7 +7,9 @@ import { formatSize, formatDate } from '../utils.js';
 
 const FILE_KEY_PREFIX_LEN = 18;
 const FILE_KEY_SUFFIX_LEN = 22;
-const FILE_NAME_MAX_LEN = 50;
+const FILE_NAME_PREFIX_LEN = 20;
+const FILE_NAME_SUFFIX_LEN = 20;
+const FILE_NAME_MAX_LEN = FILE_NAME_PREFIX_LEN + FILE_NAME_SUFFIX_LEN + 3; // prefix + "..." + suffix
 
 function escapeHtml(str) {
   if (str == null) return '';
@@ -30,10 +32,10 @@ function formatFileNameForList(fileName) {
   const s = String(fileName);
   const len = s.length;
   let display = s;
-  if (s.length > FILE_NAME_MAX_LEN) {
-    display = '...' + s.slice(-(FILE_NAME_MAX_LEN - 3));
+  if (len > FILE_NAME_MAX_LEN) {
+    display = s.slice(0, FILE_NAME_PREFIX_LEN) + '...' + s.slice(-FILE_NAME_SUFFIX_LEN);
   }
-  return { display, len, badge: len > FILE_NAME_MAX_LEN ? len + 'c' : null };
+  return { display, len, badge: null };
 }
 
 function formatFileKeyForList(fileKey) {
@@ -45,7 +47,7 @@ function formatFileKeyForList(fileKey) {
   if (needEllipsis) {
     display = s.slice(0, FILE_KEY_PREFIX_LEN) + '...' + s.slice(-FILE_KEY_SUFFIX_LEN);
   }
-  return { display, len, badge: len > FILE_KEY_PREFIX_LEN + FILE_KEY_SUFFIX_LEN ? len + 'c' : null };
+  return { display, len, badge: null };
 }
 
 function highlightSearch(text, keyword) {
@@ -96,10 +98,13 @@ export function generateFileRowHTML(file, currentSearchKeyword) {
   const localPathEsc = file.localPath ? escapeJsString(file.localPath) : '';
   const localPathAttr = file.localPath ? escapeHtmlAttr(file.localPath) : '';
   return `
+    <td>
+      <input type="checkbox" class="form-check-input file-select-checkbox" value="${keyAttr}" onchange="toggleFileSelect('${keyEsc}', this.checked)">
+    </td>
     <td class="filename-cell" title="${titleName}" aria-label="${titleName}">
       <div class="file-value-compact">
         <span class="text-ellipsis">${nameDisplay}</span>${nameBadge}
-        <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-secondary" onclick="toggleExpandDetail('${keyEsc}')" title="查看完整" aria-label="查看完整文件名与 Key">
+        <button type="button" class="btn btn-link btn-sm btn-ui-compact p-0 ms-1 text-secondary" onclick="toggleExpandDetail('${keyEsc}')" title="查看完整" aria-label="查看完整文件名与 Key">
           <i class="bi bi-eye"></i>
         </button>
       </div>
@@ -108,7 +113,7 @@ export function generateFileRowHTML(file, currentSearchKeyword) {
       <div class="file-value-compact">
         <span class="text-ellipsis">${keyDisplay}</span>${keyBadge}
       </div>
-      <button type="button" class="btn btn-sm btn-outline-secondary key-cell-mobile-btn" onclick="toggleExpandDetail('${keyEsc}')" aria-label="Key 详情">
+      <button type="button" class="btn btn-sm btn-ui-compact btn-outline-secondary key-cell-mobile-btn" onclick="toggleExpandDetail('${keyEsc}')" aria-label="Key 详情">
         <i class="bi bi-info-circle"></i> Key详情
       </button>
     </td>
@@ -117,16 +122,17 @@ export function generateFileRowHTML(file, currentSearchKeyword) {
     <td>${file.status}</td>
     <td>${formatDate(file.updateTime)}</td>
     <td>${file.unfreezeTime ? formatDate(file.unfreezeTime) : '-'}</td>
+    <td>${escapeHtml(file.groupName || '-')}</td>
     <td class="file-actions-cell">
       <div class="file-actions-row d-flex flex-row align-items-center gap-2">
-        <button class="btn btn-sm btn-warning unfreeze-btn" onclick="unfreezeFile('${keyEsc}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
-        <button class="btn btn-sm btn-primary download-btn" data-filekey="${keyAttr}" onclick="downloadFile('${keyEsc}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
+        <button class="btn btn-sm btn-ui-compact btn-warning unfreeze-btn" onclick="unfreezeFile('${keyEsc}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
+        <button class="btn btn-sm btn-ui-compact btn-primary download-btn" data-filekey="${keyAttr}" onclick="downloadFile('${keyEsc}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
         ${buildPreviewButton(file, keyEsc)}
-        <button class="btn btn-sm btn-danger" onclick="deleteFile('${keyEsc}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
+        <button class="btn btn-sm btn-ui-compact btn-danger" onclick="deleteFile('${keyEsc}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
       </div>
       <div class="file-actions-row d-flex flex-row align-items-center gap-2">
-        ${file.localPath ? `<button class='btn btn-outline-secondary btn-sm' onclick='copyLocalPath("${escapeJsString(file.localPath)}")' title='复制本地路径'>复制路径</button>` : ''}
-        ${file.localPath ? `<button class='btn btn-outline-danger btn-sm' onclick='releaseLocalFile("${keyEsc}", "${localPathEsc}")' title='释放本地文件'>释放本地</button>` : ''}
+        ${file.localPath ? `<button class='btn btn-outline-secondary btn-sm btn-ui-compact' onclick='copyLocalPath("${escapeJsString(file.localPath)}")' title='复制本地路径'>复制路径</button>` : ''}
+        ${file.localPath ? `<button class='btn btn-outline-danger btn-sm btn-ui-compact' onclick='releaseLocalFile("${keyEsc}", "${localPathEsc}")' title='释放本地文件'>释放本地</button>` : ''}
         ${file.localPath ? `<span class="ms-1" title="${file.localPathExists === undefined ? '未知' : (file.localPathExists ? '本地文件存在' : '本地文件不存在')}">
           ${file.localPathExists === undefined ? '' : (file.localPathExists ? '<span style=\'color:green;font-size:1.2em;\'>&#10003;</span>' : `<span style='color:red;font-size:1.2em;cursor:pointer;' data-filekey='${keyAttr}' onclick='handleLocalPathMissingDownload(this)'>&#10007;</span>`)}
         </span>` : ''}
@@ -153,14 +159,14 @@ export function buildExpandedDetailRow(file, currentSearchKeyword) {
         <label>文件名</label>
         <div class="file-value-expanded" aria-label="${nameAttr}">${nameHtml}</div>
         <div class="copy-buttons mt-1">
-          <button type="button" class="btn btn-sm btn-outline-secondary copy-file-name-btn">复制文件名</button>
+          <button type="button" class="btn btn-sm btn-ui-compact btn-outline-secondary copy-file-name-btn">复制文件名</button>
         </div>
       </div>
       <div class="row-expand-item">
         <label>Key</label>
         <div class="file-value-expanded" aria-label="${keyAttr}">${keyHtml}</div>
         <div class="copy-buttons mt-1">
-          <button type="button" class="btn btn-sm btn-outline-secondary copy-file-key-btn">复制 Key</button>
+          <button type="button" class="btn btn-sm btn-ui-compact btn-outline-secondary copy-file-key-btn">复制 Key</button>
         </div>
       </div>
     </div>

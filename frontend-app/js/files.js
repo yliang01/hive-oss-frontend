@@ -6,8 +6,11 @@ const API_BASE = 'http://localhost:8080';
 const pageSize = 50;
 let currentPage = 1;
 let totalFiles = 0;
-let currentBucket = '';
+let currentCategory = '';
+let currentGroupId = '';
 let currentSearchKeyword = ''; // 当前搜索关键词
+let categoryMeta = null;
+const selectedFileKeys = new Set();
 
 let expandedFileKey = null; // 当前展开详情的行（同一时间只展开一行）
 let previewModalInstance = null;
@@ -42,26 +45,90 @@ function escapeJsString(str) {
   return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '\\r').replace(/\n/g, '\\n');
 }
 
-// 获取当前 bucket
-function getCurrentBucket() {
+// 获取当前 category
+function getCurrentCategory() {
   const url = new URL(window.location.href);
-  return url.searchParams.get('bucket');
+  return url.searchParams.get('category');
 }
 
-// 返回首页（含 Bucket 选择）
-function backToBuckets() {
+// 返回首页（分类入口）
+function backToCategories() {
   window.location.href = window.location.origin + '/';
+}
+
+function applyCategoryTheme() {
+  const titleEl = document.getElementById('current-category');
+  if (titleEl) {
+    titleEl.textContent = categoryMeta?.name || currentCategory;
+  }
+  document.body.classList.remove('category-image', 'category-hot', 'category-archive');
+  if (categoryMeta?.uiVariant === 'image') {
+    document.body.classList.add('category-image');
+  } else if (categoryMeta?.uiVariant === 'archive') {
+    document.body.classList.add('category-archive');
+  } else {
+    document.body.classList.add('category-hot');
+  }
+}
+
+function loadCategoryMetaAndGroups() {
+  currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
+    return Promise.reject(new Error('未指定分类'));
+  }
+  const categoriesReq = fetch(`${API_BASE}/categories`)
+    .then(res => {
+      if (!res.ok) throw new Error('获取分类失败');
+      return res.json();
+    })
+    .then(categories => {
+      categoryMeta = (categories || []).find(item => item.code === currentCategory) || null;
+      applyCategoryTheme();
+    });
+  const groupsReq = fetch(`${API_BASE}/categories/${currentCategory}/groups`)
+    .then(res => {
+      if (!res.ok) throw new Error('获取分组失败');
+      return res.json();
+    })
+    .then(groups => {
+      const select = document.getElementById('group-select');
+      const assignSelect = document.getElementById('assign-group-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">未分组</option>';
+      if (assignSelect) {
+        assignSelect.innerHTML = '<option value="">选择目标分组</option>';
+      }
+      (groups || []).forEach(group => {
+        const option = document.createElement('option');
+        option.value = String(group.groupId);
+        option.textContent = group.groupName || group.groupCode || String(group.groupId);
+        select.appendChild(option);
+        if (assignSelect) {
+          const copied = option.cloneNode(true);
+          assignSelect.appendChild(copied);
+        }
+      });
+      select.value = currentGroupId !== undefined && currentGroupId !== null ? currentGroupId : '';
+    });
+  return Promise.all([categoriesReq, groupsReq]);
+}
+
+function changeGroupFilter(groupId) {
+  currentGroupId = groupId || '';
+  currentPage = 1;
+  listFiles();
 }
 
 // 新增：刷新单个文件信息
 function refreshSingleFile(fileKey) {
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
     return;
   }
   
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`)
+  fetch(`${API_BASE}/categories/${currentCategory}/files/${fileKey}`)
     .then(res => {
       if (!res.ok) throw new Error('获取文件信息失败');
       return res.json();
@@ -149,7 +216,7 @@ function toggleExpandDetail(fileKey) {
   expandedFileKey = fileKey;
   const file = (window.allFiles && window.allFiles.find(f => f.fileKey === fileKey)) || { fileKey, fileName: '' };
   const td = document.createElement('td');
-  td.colSpan = 8;
+  td.colSpan = 10;
   td.className = 'row-expand-panel';
   td.innerHTML = buildExpandedDetailRow(file);
   const tr = document.createElement('tr');
@@ -211,9 +278,9 @@ function renderFiles(files) {
 
   if (!files.length) {
     if (currentSearchKeyword.trim()) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-secondary">未找到包含"${escapeHtml(currentSearchKeyword)}"的文件</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="text-center text-secondary">未找到包含"${escapeHtml(currentSearchKeyword)}"的文件</td></tr>`;
     } else {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-secondary">暂无文件</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-secondary">暂无文件</td></tr>';
     }
     return;
   }
@@ -228,22 +295,27 @@ function renderFiles(files) {
 
 // 获取文件列表
 function listFiles() {
-  currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
-    return Promise.reject(new Error('未指定 bucket'));
+  currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
+    return Promise.reject(new Error('未指定分类'));
   }
   
-  document.getElementById('current-bucket').textContent = currentBucket;
+  applyCategoryTheme();
   
   // 添加loading状态
   const tbody = document.querySelector('#file-table tbody');
-  tbody.innerHTML = '<tr><td colspan="8" class="text-center">加载中...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" class="text-center">加载中...</td></tr>';
   
-  // 构建API URL
-  let apiUrl = `${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`;
+  // 构建API URL：未分组(空)传 ungroupedOnly=true，指定分组传 groupId，互斥
+  let apiUrl = `${API_BASE}/categories/${currentCategory}/files?page=${currentPage - 1}&pageSize=${pageSize}`;
+  if (currentGroupId) {
+    apiUrl += `&groupId=${encodeURIComponent(currentGroupId)}`;
+  } else {
+    apiUrl += '&ungroupedOnly=true';
+  }
   if (currentSearchKeyword.trim()) {
-    apiUrl = `${API_BASE}/buckets/${currentBucket}/files/search?keyword=${encodeURIComponent(currentSearchKeyword.trim())}&page=${currentPage - 1}&pageSize=${pageSize}`;
+    apiUrl += `&keyword=${encodeURIComponent(currentSearchKeyword.trim())}`;
   }
   
   return fetch(apiUrl)
@@ -256,6 +328,7 @@ function listFiles() {
         totalFiles = data.total || 0;
         window.allFiles = data.files; // 缓存到全局变量
         renderFiles(data.files);
+        clearSelectedRows();
         renderPagination({
           totalPages: Math.ceil(data.total / data.pageSize),
           number: data.page,
@@ -381,9 +454,9 @@ function downloadFile(fileKey) {
     showError('未指定文件key');
     return;
   }
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
     return;
   }
   const btn = getDownloadButtonByFileKey(fileKey);
@@ -391,7 +464,7 @@ function downloadFile(fileKey) {
     btn.disabled = true;
     btn.textContent = '下载准备中...';
   }
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/download-task/${fileKey}`, { method: 'POST' })
+  fetch(`${API_BASE}/categories/${currentCategory}/files/download-task/${fileKey}`, { method: 'POST' })
     .then(res => {
       if (!res.ok) throw new Error('无法触发下载任务');
       showDownloadProgress('下载准备中...', fileKey);
@@ -417,17 +490,17 @@ function pollDownloadStatus(fileKey, btn, tryCount = 0) {
     showError('下载超时，请重试');
     return;
   }
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
     if (btn) {
       btn.disabled = false;
       btn.textContent = '下载';
     }
     showDownloadProgress('', fileKey);
-    showError('未指定 bucket');
+    showError('未指定分类');
     return;
   }
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/download-task-status/${fileKey}`)
+  fetch(`${API_BASE}/categories/${currentCategory}/files/download-task-status/${fileKey}`)
     .then(res => {
       if (!res.ok) throw new Error('无法获取下载进度');
       return res.json();
@@ -464,6 +537,97 @@ function pollDownloadStatus(fileKey, btn, tryCount = 0) {
       }
     })
     .catch(() => setTimeout(() => pollDownloadStatus(fileKey, btn, tryCount + 1), 3000));
+}
+
+function toggleFileSelect(fileKey, checked) {
+  if (!fileKey) return;
+  if (checked) {
+    selectedFileKeys.add(fileKey);
+  } else {
+    selectedFileKeys.delete(fileKey);
+  }
+}
+
+function toggleSelectAll(checked) {
+  const checkboxes = document.querySelectorAll('.file-select-checkbox');
+  checkboxes.forEach(box => {
+    box.checked = checked;
+    if (checked) {
+      selectedFileKeys.add(box.value);
+    } else {
+      selectedFileKeys.delete(box.value);
+    }
+  });
+}
+
+function clearSelectedRows() {
+  selectedFileKeys.clear();
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (selectAll) {
+    selectAll.checked = false;
+  }
+}
+
+// 点击行空白处时切换该行文件的选中状态（不响应按钮、链接、复选框等交互元素）
+function handleFileRowClick(e) {
+  const tr = e.target.closest('tr[data-filekey]');
+  if (!tr) return;
+  if (e.target.closest('button, a, input, select, [role="button"]')) return;
+  const fileKey = tr.getAttribute('data-filekey');
+  const checkbox = tr.querySelector('.file-select-checkbox');
+  if (!checkbox) return;
+  checkbox.checked = !checkbox.checked;
+  toggleFileSelect(fileKey, checkbox.checked);
+}
+
+let assignModalInstance = null;
+
+function openAssignModal() {
+  if (!selectedFileKeys.size) {
+    showInfo('请先勾选文件');
+    return;
+  }
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
+    return;
+  }
+  const countEl = document.getElementById('assign-selected-count');
+  if (countEl) countEl.textContent = `已选 ${selectedFileKeys.size} 个文件`;
+  const modalEl = document.getElementById('assignModal');
+  if (!modalEl) return;
+  if (!assignModalInstance) assignModalInstance = new bootstrap.Modal(modalEl);
+  assignModalInstance.show();
+}
+
+function confirmAssignSelectedFiles() {
+  const groupId = (document.getElementById('assign-group-select') || {}).value;
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) return showError('未指定分类');
+  if (!groupId) return showError('请选择目标分组');
+  if (!selectedFileKeys.size) return showInfo('请先勾选文件');
+  const confirmBtn = document.getElementById('assign-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = true;
+  fetch(`${API_BASE}/categories/${currentCategory}/groups/${groupId}/files:assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileKeys: Array.from(selectedFileKeys), operator: 'ui' })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error('批量分配失败');
+      showSuccess('批量分配成功');
+      if (assignModalInstance) assignModalInstance.hide();
+      clearSelectedRows();
+      listFiles();
+    })
+    .catch(e => showError(e.message))
+    .finally(() => {
+      if (confirmBtn) confirmBtn.disabled = false;
+    });
+}
+
+function assignSelectedFiles() {
+  openAssignModal();
 }
 
 function triggerBrowserDownload(url, fileKey) {
@@ -595,12 +759,12 @@ function showDownloadProgress(msg, fileKey) {
 // 删除文件
 function deleteFile(fileKey) {
   showConfirm('确定要删除该文件吗？', () => {
-    const currentBucket = getCurrentBucket();
-    if (!currentBucket) {
-      showError('未指定 bucket');
+    const currentCategory = getCurrentCategory();
+    if (!currentCategory) {
+      showError('未指定分类');
       return;
     }
-    fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`, { method: 'DELETE' })
+    fetch(`${API_BASE}/categories/${currentCategory}/files/${fileKey}`, { method: 'DELETE' })
       .then(res => {
         if (!res.ok) throw new Error('删除文件失败');
         showSuccess('删除操作已提交');
@@ -617,14 +781,14 @@ function deleteFile(fileKey) {
 function confirmDeleteFiles() {
   const confirmBtn = document.getElementById('sync-local-btn');
   const confirmIcon = confirmBtn.querySelector('.sync-icon');
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
     return;
   }
   confirmBtn.disabled = true;
   confirmIcon.classList.add('spinning');
-  fetch(`${API_BASE}/files/confirm-delete/${currentBucket}`, {
+  fetch(`${API_BASE}/categories/${currentCategory}/files/confirm-delete`, {
     method: 'POST'
   })
     .then(res => {
@@ -643,14 +807,14 @@ function confirmDeleteFiles() {
 function syncRemoteFiles() {
   const syncBtn = document.getElementById('sync-remote-btn');
   const syncIcon = syncBtn.querySelector('.sync-icon');
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
+    showError('未指定分类');
     return;
   }
   syncBtn.disabled = true;
   syncIcon.classList.add('spinning');
-  fetch(`${API_BASE}/files/sync-remote/${currentBucket}`, {
+  fetch(`${API_BASE}/categories/${currentCategory}/files/sync-remote`, {
     method: 'POST'
   })
     .then(res => {
@@ -688,15 +852,15 @@ function unfreezeFile(fileKey) {
   const originalText = btn.textContent;
   btn.textContent = '解冻中...';
 
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
     btn.disabled = false;
     btn.textContent = originalText;
-    showError('未指定 bucket');
+    showError('未指定分类');
     return;
   }
 
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze/${fileKey}`, { method: 'POST' })
+  fetch(`${API_BASE}/categories/${currentCategory}/files/unfreeze/${fileKey}`, { method: 'POST' })
     .then(res => {
       if (res.status === 200) {
         // 解冻成功，直接更新按钮状态
@@ -734,15 +898,15 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
     return;
   }
   
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
+  const currentCategory = getCurrentCategory();
+  if (!currentCategory) {
     btn.disabled = false;
     btn.textContent = originalText;
-    showError('未指定 bucket');
+    showError('未指定分类');
     return;
   }
   
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze-status/${fileKey}`)
+  fetch(`${API_BASE}/categories/${currentCategory}/files/unfreeze-status/${fileKey}`)
     .then(res => {
       if (res.status === 200) {
         // 解冻完成
@@ -827,12 +991,12 @@ function handleLocalPathMissingDownload(fileKeyOrEl) {
 // 新增：释放本地文件
 function releaseLocalFile(fileKey, localPath) {
   showConfirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。', () => {
-    const currentBucket = getCurrentBucket();
-    if (!currentBucket) {
-      showError('未指定 bucket');
+    const currentCategory = getCurrentCategory();
+    if (!currentCategory) {
+      showError('未指定分类');
       return;
     }
-    fetch(`${API_BASE}/buckets/${currentBucket}/files/release-local/${fileKey}`, { method: 'POST' })
+    fetch(`${API_BASE}/categories/${currentCategory}/files/release-local/${fileKey}`, { method: 'POST' })
       .then(res => {
         if (!res.ok) throw new Error('释放本地文件失败');
         showSuccess('本地文件已释放');
@@ -924,15 +1088,15 @@ function uploadFile() {
   const uploadStatus = document.getElementById('uploadStatus');
   
   const file = fileInput.files[0];
-  const currentBucket = getCurrentBucket();
+  const currentCategory = getCurrentCategory();
   
   if (!file) {
     showError('请选择要上传的文件');
     return;
   }
   
-  if (!currentBucket) {
-    showError('未指定 bucket');
+  if (!currentCategory) {
+    showError('未指定分类');
     return;
   }
   
@@ -979,8 +1143,8 @@ function uploadFile() {
         // 根据fileKey获取文件信息并添加到列表顶部
         if (response.fileKey) {
           // 获取刚上传文件的详细信息
-          const currentBucket = getCurrentBucket();
-          fetch(`${API_BASE}/buckets/${currentBucket}/files/${response.fileKey}`)
+          const currentCategory = getCurrentCategory();
+          fetch(`${API_BASE}/categories/${currentCategory}/files/${response.fileKey}`)
             .then(res => {
               if (!res.ok) throw new Error('获取文件信息失败');
               return res.json();
@@ -1042,7 +1206,7 @@ function uploadFile() {
   });
   
   // 发送请求
-  xhr.open('POST', `${API_BASE}/buckets/${currentBucket}/files/upload`);
+  xhr.open('POST', `${API_BASE}/categories/${currentCategory}/files/upload`);
   xhr.send(formData);
 }
 
@@ -1108,7 +1272,7 @@ function refreshFileList() {
 }
 
 window.toggleExpandDetail = toggleExpandDetail;
-window.backToBuckets = backToBuckets;
+window.backToCategories = backToCategories;
 window.listFiles = listFiles;
 window.refreshFileList = refreshFileList; // 新增：暴露带动画的刷新函数
 window.performSearch = performSearch; // 新增：暴露搜索函数
@@ -1131,8 +1295,15 @@ window.generateFileRowHTML = generateFileRowHTML; // 新增：暴露生成HTML�
 window.openUploadModal = openUploadModal; // 新增：暴露上传模态框函数
 window.clearFileSelection = clearFileSelection; // 新增：暴露清除文件选择函数
 window.uploadFile = uploadFile; // 新增：暴露上传文件函数
+window.changeGroupFilter = changeGroupFilter;
+window.toggleFileSelect = toggleFileSelect;
+window.toggleSelectAll = toggleSelectAll;
+window.assignSelectedFiles = assignSelectedFiles;
+window.confirmAssignSelectedFiles = confirmAssignSelectedFiles;
 
 window.onload = () => {
   ensurePreviewModalInit();
-  listFiles();
+  const tbody = document.querySelector('#file-table tbody');
+  if (tbody) tbody.addEventListener('click', handleFileRowClick);
+  loadCategoryMetaAndGroups().finally(() => listFiles());
 };

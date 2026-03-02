@@ -1,494 +1,167 @@
-# OSS 管理前端 API 接口文档
+# OSS 管理前端 API 接口文档（全数据化分类版）
 
 ## 基础信息
 
-- 基础URL: `http://localhost:8080`
+- 基础 URL: `http://localhost:8080`
 - 内容类型: `application/json`
+- 分类来源: `file_category` 表（动态维护）
 
-## 接口列表
+## 分类与分组
 
-### 1. 获取Bucket列表
+### 1. 获取分类列表
 
-```
-GET /buckets
-```
+`GET /categories`
 
-**响应格式：**
+### 2. 获取分类下分组列表
 
-```json
-[
-  "bucket1",
-  "bucket2",
-  "bucket3"
-]
-```
+`GET /categories/{category}/groups`
 
-### 2. 获取文件列表
+### 3. 分组分配文件
 
-```
-GET /buckets/{bucket}/files
-```
+`POST /categories/{category}/groups/{groupId}/files:assign`
 
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `page`: 页码，从0开始（查询参数）
-- `pageSize`: 每页大小（查询参数）
-
-**响应格式：**
+请求体：
 
 ```json
 {
-  "files": [
-    {
-      "fileKey": "example/file.txt",
-      "fileName": "file.txt",
-      "size": 1024,
-      "zipped": false,
-      "status": "NORMAL",
-      "updateTime": "2024-01-01T12:00:00Z",
-      "unfreezeTime": null,
-      "restorable": false,
-      "downloadable": true,
-      "deletable": true,
-      "localPath": "/local/path/file.txt",
-      "localPathExists": true,
-      "previewable": true,
-      "previewUrl": "/buckets/ALIBABA_STANDARD/files/preview/example-file-key",
-      "mimeType": "image/jpeg",
-      "previewBlockedReason": null,
-      "previewMaxSizeBytes": 10485760
-    }
-  ],
-  "total": 100,
-  "page": 0,
-  "pageSize": 50
+  "fileKeys": ["key1", "key2"],
+  "operator": "admin"
 }
 ```
 
-### 3. 搜索文件 ⭐ 新增
+### 4. 分组迁移文件
 
-```
-GET /buckets/{bucket}/files/search
-```
+`POST /categories/{category}/groups/{groupId}/files:move`
 
-**请求参数：**
+请求体同上。
 
-- `bucket`: 桶名称（路径参数）
-- `keyword`: 搜索关键词（查询参数）
-- `page`: 页码，从0开始（查询参数，可选，默认0）
-- `pageSize`: 每页大小（查询参数，可选，默认50）
+> Deprecated：该接口为兼容别名，前端统一使用 `files:assign`。
 
-**响应格式：**
+## 分类/分组管理（管理员）
+
+### A1. 分类列表（管理端）
+
+`GET /category-admin/categories`
+
+### A2. 创建分类
+
+`POST /category-admin/categories`
+
+### A3. 更新分类
+
+`PUT /category-admin/categories/{categoryCode}`
+
+### A4. 停用分类
+
+`POST /category-admin/categories/{categoryCode}/disable`
+
+### A5. 删除分类
+
+`DELETE /category-admin/categories/{categoryCode}`
+
+### A6. 查询分类下分组（管理端）
+
+`GET /category-admin/categories/{categoryCode}/groups`
+
+### A7. 创建分组
+
+`POST /category-admin/categories/{categoryCode}/groups`
+
+### A8. 更新分组
+
+`PUT /category-admin/categories/{categoryCode}/groups/{groupId}`
+
+### A9. 删除分组
+
+`DELETE /category-admin/categories/{categoryCode}/groups/{groupId}`
+
+## 文件管理
+
+### 5. 获取文件列表
+
+`GET /categories/{category}/files?page=0&pageSize=50&groupId=1`
+
+`groupId` 可选，不传则为分类内全部文件。
+
+`keyword` 可选，传入后按文件名模糊搜索，例如：
+
+`GET /categories/{category}/files?page=0&pageSize=50&groupId=1&keyword=abc`
+
+### 6. 搜索文件
+
+`GET /categories/{category}/files/search?keyword=abc&page=0&pageSize=50&groupId=1`
+
+> Deprecated：兼容接口。建议统一使用 `GET /categories/{category}/files` 并通过 `keyword` 查询参数搜索。
+
+### 7. 获取单个文件
+
+`GET /categories/{category}/files/{fileKey}`
+
+### 8. 预览文件
+
+`GET /categories/{category}/files/preview/{fileKey}`
+
+说明：前端通过文件详情中的 `previewUrl` 字段间接访问该地址（`img/iframe src`），不是 `fetch/xhr` 显式调用。
+
+### 9. 删除文件
+
+`DELETE /categories/{category}/files/{fileKey}`
+
+### 10. 解冻文件
+
+`POST /categories/{category}/files/unfreeze/{fileKey}`
+
+### 11. 查询解冻状态
+
+`GET /categories/{category}/files/unfreeze-status/{fileKey}`
+
+### 12. 创建下载任务
+
+`POST /categories/{category}/files/download-task/{fileKey}`
+
+### 13. 查询下载任务状态
+
+`GET /categories/{category}/files/download-task-status/{fileKey}`
+
+响应体示例：
 
 ```json
 {
-  "files": [
-    {
-      "fileKey": "example/file.txt",
-      "fileName": "file.txt",
-      "size": 1024,
-      "zipped": false,
-      "status": "NORMAL",
-      "updateTime": "2024-01-01T12:00:00Z",
-      "unfreezeTime": null,
-      "restorable": false,
-      "downloadable": true,
-      "deletable": true,
-      "localPath": "/local/path/file.txt",
-      "localPathExists": true,
-      "previewable": true,
-      "previewUrl": "/buckets/ALIBABA_STANDARD/files/preview/example-file-key",
-      "mimeType": "image/jpeg",
-      "previewBlockedReason": null,
-      "previewMaxSizeBytes": 10485760
-    }
-  ],
-  "total": 100,
-  "page": 0,
-  "pageSize": 50
+  "status": "success",
+  "progress": 100,
+  "downloadUrl": "file:///C:/data/hive/download/example.txt"
 }
 ```
 
-**说明：**
+### 14. 释放本地文件
 
-- 支持模糊搜索，匹配文件名包含关键词的文件
-- 搜索不区分大小写
-- 返回格式与文件列表接口保持一致
-- 支持分页
+`POST /categories/{category}/files/release-local/{fileKey}`
 
-### 4. 获取单个文件信息
+### 15. 上传文件
 
-```
-GET /buckets/{bucket}/files/{fileKey}
-```
+`POST /categories/{category}/files/upload` (`multipart/form-data`)
 
-**请求参数：**
+## 同步能力
 
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
+### 16. 确认删除
 
-**响应格式：**
+`POST /categories/{category}/files/confirm-delete`
 
-```json
-{
-  "fileKey": "example/file.txt",
-  "fileName": "file.txt",
-  "size": 1024,
-  "zipped": false,
-  "status": "NORMAL",
-  "updateTime": "2024-01-01T12:00:00Z",
-  "unfreezeTime": null,
-  "restorable": false,
-  "downloadable": true,
-  "deletable": true,
-  "localPath": "/local/path/file.txt",
-  "localPathExists": true,
-  "previewable": false,
-  "previewUrl": null,
-  "mimeType": null,
-  "previewBlockedReason": "UNSUPPORTED_TYPE",
-  "previewMaxSizeBytes": 10485760
-}
-```
+### 17. 远程同步
 
-### 4.1 预览文件（后端流式解密）
+`POST /categories/{category}/files/sync-remote`
 
-```
-GET /buckets/{bucket}/files/preview/{fileKey}
-```
+## 数据库备份与恢复（保持不变）
 
-**请求参数：**
+- `POST /db-backup/backup`
+- `GET /db-backup/ack/{batchId}`
+- `GET /db-backup/backups`
+- `POST /db-backup/restore/{batchId}`
 
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
+## SQL 交付文件（手工执行）
 
-**响应：**
-
-- 成功: `200 OK`（`Content-Disposition: inline`，返回可被浏览器识别的解密后文件流）
-- 失败:
-  - `404 Not Found`: 文件不存在
-  - `423 Locked`: 文件处于冻结态，需先解冻
-  - `413 Payload Too Large`: 文件超过预览大小限制
-  - `415 Unsupported Media Type`: 文件类型不支持预览
-  - `5xx`: OSS读取或解密失败
-
-**错误响应：**
-
-- 404 Not Found: 文件或Bucket不存在
-
-```json
-{
-  "error": "文件不存在",
-  "code": "FILE_NOT_FOUND",
-  "fileKey": "example/file.txt",
-  "bucket": "example-bucket"
-}
-```
-
-### 5. 删除文件
-
-```
-DELETE /buckets/{bucket}/files/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 成功: 200 OK
-- 失败: 4xx/5xx 错误
-
-### 6. 解冻文件
-
-```
-POST /buckets/{bucket}/files/unfreeze/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 200 OK: 解冻立即完成
-- 202 Accepted: 解冻请求已接受，正在处理中
-- 失败: 4xx/5xx 错误
-
-### 7. 解冻状态管理
-
-```
-GET /buckets/{bucket}/files/unfreeze-status/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 200 OK: 解冻已完成
-- 202 Accepted: 解冻仍在进行中
-- 失败: 4xx/5xx 错误
-  ```markdown
-  ：恢复处理中（轮询）
-  ```
-
-### 7. 释放本地文件
-
-```
-POST /buckets/{bucket}/files/release-local/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 成功: 200 OK
-- 失败: 4xx/5xx 错误
-
-### 8. 确认删除文件
-
-```
-POST /files/confirm-delete/{bucket}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-
-**响应：**
-
-- 成功: 200 OK
-- 失败: 4xx/5xx 错误
-
-### 9. 远程同步
-
-```
-POST /files/sync-remote/{bucket}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-
-**响应格式：**
-
-```json
-{
-  "ossTotal": 100,
-  "ossOnly": 5,
-  "ossToDbMatched": 90,
-  "ossToDbMismatched": 3,
-  "dbToOssMismatched": 2
-}
-```
-
-### 10. 创建下载任务
-
-```
-POST /buckets/{bucket}/files/download-task/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 成功: 200 OK
-- 失败: 4xx/5xx 错误
-
-### 11. 查询下载任务状态
-
-```
-GET /buckets/{bucket}/files/download-task-status/{fileKey}
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `fileKey`: 文件Key（路径参数）
-
-**响应格式：**
-
-```json
-{
-  "status": "downloading",
-  "progress": 50,
-  "downloadUrl": "http://example.com/download/file.txt"
-}
-```
-
-### 12. 下载文件
-
-```
-GET /files/download/{fileKey}
-```
-
-**请求参数：**
-
-- `fileKey`: 文件Key（路径参数）
-
-**响应：**
-
-- 成功: 文件流
-- 失败: 4xx/5xx 错误
-
-### 13. 上传文件 ⭐ 新增
-
-```
-POST /buckets/{bucket}/files/upload
-```
-
-**请求参数：**
-
-- `bucket`: 桶名称（路径参数）
-- `file`: 文件（multipart/form-data）
-
-**响应格式：**
-
-成功时（200 OK）：
-
-```json
-{
-  "fileKey": "example/file.txt"
-}
-```
-
-失败时（4xx/5xx）：
-
-- 400 Bad Request: 文件格式不支持或文件过大
-- 409 Conflict: 文件已存在
-- 413 Payload Too Large: 文件大小超限
-
-**错误响应：**
-
-- 400 Bad Request: 文件格式不支持或文件过大
-- 409 Conflict: 文件已存在
-- 413 Payload Too Large: 文件大小超限
-
-## 数据库备份与恢复
-
-### 14. 触发备份
-
-```
-POST /db-backup/backup
-```
-
-**响应（202 Accepted）：**
-
-```json
-{
-  "batchId": "hive-20260227153010",
-  "status": "PENDING",
-  "message": "backup task accepted"
-}
-```
-
-### 15. 查询批次 ACK
-
-```
-GET /db-backup/ack/{batchId}
-```
-
-**响应（200 OK）：**
-
-已完成上传时：
-
-```json
-{
-  "batchId": "hive-20260227153010",
-  "status": "UPLOADED",
-  "ackTime": "2026-02-27T07:31:22Z",
-  "database": "hive",
-  "message": "backup uploaded to oss"
-}
-```
-
-任务处理中（对象尚未齐全）时：
-
-```json
-{
-  "batchId": "hive-20260227153010",
-  "status": "PENDING",
-  "message": "backup task in progress"
-}
-```
-
-**状态说明：** `PENDING` 任务处理中（对象尚未齐全）；`UPLOADED` 备份已上传；`RESTORED` 恢复完成；`FAILED` 失败。
-
-- 404：仅当 batchId 非法（空）或不存在时返回，不表示“处理中”。
-
-### 16. 查询备份列表
-
-```
-GET /db-backup/backups
-```
-
-**响应：**
-
-```json
-{
-  "items": [
-    {
-      "batchId": "hive-20260227153010",
-      "database": "hive",
-      "status": "UPLOADED",
-      "createdAt": "2026-02-27T07:30:10Z"
-    }
-  ],
-  "total": 128
-}
-```
-
-### 17. 按批次恢复
-
-```
-POST /db-backup/restore/{batchId}
-```
-
-**响应（202 Accepted）：**
-
-```json
-{
-  "batchId": "hive-20260227153010",
-  "status": "PENDING",
-  "message": "restore task accepted"
-}
-```
-
-- 404：批次不存在
-- 409：批次不可恢复（如状态非 UPLOADED）
-
-**前端恢复轮询状态（首页）**
-
-- `PENDING`：恢复处理中（轮询）
-- `RESTORED`：恢复完成（成功）
-- `FAILED`：恢复失败（失败）
-
-## 文件状态说明
-
-- `NORMAL`: 正常状态
-- `DB_ONLY`: 仅数据库中存在
-- `TO_BE_DELETED`: 待删除状态
-- `UPLOADED`: 已上传状态
-
-## 错误响应格式
-
-```json
-{
-  "error": "错误描述信息",
-  "code": "ERROR_CODE"
-}
-```
+- `hive-oss/docs/modules/001_category_group_schema.sql`
+- `hive-oss/docs/modules/002_category_seed.sql`
+- `hive-oss/docs/modules/003_index_and_constraints.sql`
+- `hive-oss/docs/modules/004_safe_cleanup.sql`
 
