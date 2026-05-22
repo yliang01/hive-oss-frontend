@@ -1186,7 +1186,20 @@ function clearFileSelection() {
   uploadBtn.disabled = true;
 }
 
-function uploadFile() {
+function resetUploadProgress(progressBar, uploadProgress, uploadStatus, message) {
+  progressBar.style.transition = 'none';
+  progressBar.style.width = '0%';
+  uploadStatus.textContent = message;
+  uploadProgress.style.display = 'block';
+  progressBar.offsetHeight;
+  progressBar.style.transition = '';
+}
+
+function waitForNextFrame() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
   const uploadProgress = document.getElementById('uploadProgress');
@@ -1204,10 +1217,8 @@ function uploadFile() {
     return;
   }
 
-  uploadProgress.style.display = 'block';
   uploadBtn.disabled = true;
-  progressBar.style.width = '0%';
-  uploadStatus.textContent = `准备上传 ${file.name}...`;
+  resetUploadProgress(progressBar, uploadProgress, uploadStatus, `准备上传 ${file.name}...`);
 
   function parseUploadError(xhr) {
     try {
@@ -1222,9 +1233,59 @@ function uploadFile() {
     }
   }
 
+  function finishSuccessfulUpload(fileKey, message) {
+    progressBar.style.width = '100%';
+    uploadStatus.textContent = message;
+    showSuccess(message);
+    if (fileKey) {
+      fetch(`${API_BASE}/categories/${currentCategory}/files/${fileKey}`)
+        .then(res => res.ok ? res.json() : Promise.reject(new Error('获取文件信息失败')))
+        .then(fileData => addNewFileToTop(fileData))
+        .catch(e => console.error('获取文件信息失败:', e));
+    }
+    clearFileSelection();
+    const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+    if (modal) modal.hide();
+    uploadProgress.style.display = 'none';
+    resetUploadProgress(progressBar, uploadProgress, uploadStatus, '准备上传...');
+    uploadProgress.style.display = 'none';
+    listFiles();
+  }
+
+  try {
+    uploadStatus.textContent = `检查 ${file.name} 是否已存在...`;
+    const checkRes = await fetch(`${API_BASE}/categories/${currentCategory}/files/upload/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name })
+    });
+    const checkBody = await checkRes.json().catch(() => ({}));
+    if (checkRes.status === 409) {
+      uploadBtn.disabled = false;
+      showError(`${file.name}: 同名文件正在上传，请稍后重试`);
+      return;
+    }
+    if (!checkRes.ok) {
+      uploadBtn.disabled = false;
+      showError(`${file.name}: ${checkBody.error || '上传预检失败'}`);
+      return;
+    }
+    if (checkBody.exists) {
+      uploadBtn.disabled = false;
+      finishSuccessfulUpload(checkBody.fileKey, '文件已存在，已跳过上传');
+      return;
+    }
+  } catch (e) {
+    uploadBtn.disabled = false;
+    showError(`${file.name}: 上传预检失败`);
+    return;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   const xhr = new XMLHttpRequest();
+  resetUploadProgress(progressBar, uploadProgress, uploadStatus, `开始上传 ${file.name}...`);
+  await waitForNextFrame();
 
   xhr.upload.addEventListener('progress', (e) => {
     if (!e.lengthComputable) {
@@ -1244,23 +1305,12 @@ function uploadFile() {
   xhr.addEventListener('load', () => {
     uploadBtn.disabled = false;
     if (xhr.status === 200) {
-      progressBar.style.width = '100%';
-      uploadStatus.textContent = '上传完成';
-      showSuccess('文件上传成功');
       try {
         const response = JSON.parse(xhr.responseText);
-        if (response.fileKey) {
-          fetch(`${API_BASE}/categories/${currentCategory}/files/${response.fileKey}`)
-            .then(res => res.ok ? res.json() : Promise.reject(new Error('获取文件信息失败')))
-            .then(fileData => addNewFileToTop(fileData))
-            .catch(e => console.error('获取文件信息失败:', e));
-        }
-      } catch (_) {}
-      clearFileSelection();
-      const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
-      if (modal) modal.hide();
-      uploadProgress.style.display = 'none';
-      listFiles();
+        finishSuccessfulUpload(response.fileKey, '上传完成');
+      } catch (_) {
+        finishSuccessfulUpload(null, '上传完成');
+      }
       return;
     }
 

@@ -127,9 +127,12 @@ function disableCategory(code) {
 }
 
 function deleteCategory(code) {
+  if (!window.confirm(`确认删除分类 ${code}？删除前请确保该分类没有分组和文件。`)) {
+    return;
+  }
   fetch(`${API_BASE}/category-admin/categories/${code}`, { method: 'DELETE' })
     .then(res => {
-      if (!res.ok) throw new Error('删除分类失败（可能仍有分组）');
+      if (!res.ok) throw new Error('删除分类失败：该分类可能仍有分组或文件');
       showSuccess('删除成功');
       if (selectedCategoryCode === code) {
         selectedCategoryCode = '';
