@@ -9,6 +9,7 @@ const PHASE_TEXT = {
   PENDING: '任务处理中',
   UPLOADED: '备份已上传到 OSS',
   RESTORED: '恢复已完成',
+  RESTART_NEEDED: '需要重启应用',
   FAILED: '任务失败',
   TIMEOUT: '状态查询超时'
 };
@@ -355,6 +356,7 @@ function pollRestoreAck(batchId, onRestored, onEnd, startedAt) {
       .then(data => {
         const status = (data?.status || 'PENDING').toUpperCase();
         const phase = PHASE_TEXT[status] || PHASE_TEXT.PENDING;
+        const isRestartNeeded = status === 'RESTART_NEEDED';
         renderTaskStatus({
           taskType: 'RESTORE',
           batchId,
@@ -362,10 +364,15 @@ function pollRestoreAck(batchId, onRestored, onEnd, startedAt) {
           detail: data?.message || '',
           pollAttempts: attempts,
           elapsedSeconds,
-          state: status === 'RESTORED' ? 'success' : status === 'FAILED' ? 'failed' : 'running'
+          state: status === 'RESTORED' ? 'success' : status === 'FAILED' ? 'failed' : isRestartNeeded ? 'restart-needed' : 'running'
         });
         if (status === 'RESTORED') {
           if (onRestored) onRestored();
+          return;
+        }
+        if (isRestartNeeded) {
+          showError(data?.message || 'H2 恢复已准备好，请重启应用完成恢复');
+          if (onEnd) onEnd();
           return;
         }
         if (status === 'FAILED') {

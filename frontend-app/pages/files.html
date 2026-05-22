@@ -23,7 +23,15 @@
             <div class="files-toolbar">
                 <div class="files-toolbar__group files-toolbar__group--title">
                     <h2 class="files-toolbar__title">文件管理 - <span id="current-category"></span></h2>
-                    <button onclick="refreshFileList()" class="btn btn-outline-secondary btn-ui-compact refresh-btn" id="refresh-btn">
+                    <div class="btn-group btn-group-sm ms-2" role="group" aria-label="视图切换">
+                        <button type="button" class="btn btn-outline-secondary btn-ui-compact" id="view-mode-list" onclick="switchViewMode('list')" title="列表视图">
+                            <i class="bi bi-list-ul" aria-hidden="true"></i> 列表
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-ui-compact" id="view-mode-grid" onclick="switchViewMode('grid')" title="网格视图">
+                            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> 网格
+                        </button>
+                    </div>
+                    <button onclick="refreshFileList()" class="btn btn-outline-secondary btn-ui-compact refresh-btn ms-2" id="refresh-btn">
                         <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> 刷新
                     </button>
                 </div>
@@ -61,7 +69,7 @@
                     </div>
                 </div>
             </div>
-            <div class="table-responsive files-table-wrap">
+            <div id="files-list-view" class="table-responsive files-table-wrap">
                 <table id="file-table" class="table table-striped table-hover align-middle files-table">
                     <thead>
                     <tr>
@@ -81,6 +89,9 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+            <div id="files-grid-view" class="files-grid-wrap" style="display: none;" aria-label="网格视图">
+                <div id="files-grid" class="files-grid row g-3"></div>
             </div>
             <div id="pagination" class="files-pagination"></div>
         </section>
@@ -153,7 +164,7 @@
                             <div class="upload-placeholder">
                                 <i class="bi bi-cloud-upload upload-icon"></i>
                                 <p class="upload-text">点击选择文件或拖拽文件到此处</p>
-                                <p class="upload-hint">支持单个文件上传，最大100MB</p>
+                                <p class="upload-hint">支持大文件流式上传</p>
                             </div>
                             <input type="file" id="fileInput" class="form-control" style="display: none;" accept="*/*">
                         </div>

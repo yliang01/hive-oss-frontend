@@ -925,3 +925,34 @@
   border-radius: 8px;
   background: #fff;
 }
+
+/* 网格视图（相册） */
+.files-grid-wrap {
+  margin-top: var(--space-md);
+}
+.files-grid {
+  min-height: 120px;
+}
+.files-grid-card {
+  overflow: hidden;
+}
+.files-grid-card-img-wrap {
+  aspect-ratio: 1;
+  background: var(--color-bg-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.files-grid-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.files-grid-card-img--failed {
+  background: var(--color-bg-muted);
+  min-height: 80px;
+}
+.files-grid-card .card-body {
+  padding: var(--space-sm) var(--space-md);
+}

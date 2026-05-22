@@ -67,6 +67,8 @@ function getPreviewBlockedMessage(blockedReason) {
       return '文件过大，暂不支持预览';
     case 'UNSUPPORTED_TYPE':
       return '当前文件类型不支持预览';
+    case 'OSS_ONLY':
+      return '仅远端存在，无解密信息不可预览';
     default:
       return '文件不可预览';
   }

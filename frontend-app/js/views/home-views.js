@@ -46,6 +46,10 @@ export function renderTaskStatus(options) {
     panelEl.classList.add('is-success');
     badgeEl.classList.add('text-bg-success');
     badgeEl.textContent = '已完成';
+  } else if (state === 'restart-needed') {
+    panelEl.classList.add('is-failed');
+    badgeEl.classList.add('text-bg-danger');
+    badgeEl.textContent = '需要重启';
   } else if (state === 'failed') {
     panelEl.classList.add('is-failed');
     badgeEl.classList.add('text-bg-danger');

@@ -6,8 +6,8 @@
 
 ## 项目结构
 
-- **frontend-app/**：前端源码与 Vite 构建配置；`npm run build` 输出到 `src/main/resources/static/`。
-- **src/main/resources/static/**：构建产物（或本地开发时可单独用 serve 提供），由 hive-oss 运行时从 classpath 提供。
+- **frontend-app/**：前端源码与 Vite 构建配置；`npm run build` 输出到 `target/generated-resources/static/`。
+- **target/generated-resources/static/**：构建产物，由 Maven 打包进 `hive-oss-frontend` JAR，并由 hive-oss 运行时从 classpath 提供。
 
 ```
 frontend-app/
@@ -18,7 +18,7 @@ frontend-app/
 ├── vite.config.js
 └── package.json
 
-static/（构建后）
+target/generated-resources/static/（构建后）
 ├── index.html, pages/files.html
 ├── assets/*.js, *.css
 └── serve.json
@@ -31,10 +31,14 @@ static/（构建后）
 cd frontend-app
 npm install
 npm run dev    # 开发服务器 http://localhost:3000
-npm run build # 产出写入 ../src/main/resources/static/
+npm run build # 产出写入 ../target/generated-resources/static/
+
+# 或直接由 Maven 安装/更新依赖、构建并打包静态资源
+cd ..
+mvn package
 
 # 或仅本地预览已构建的 static
-cd src/main/resources/static
+cd target/generated-resources/static
 npx serve . --config serve.json
 ```
 

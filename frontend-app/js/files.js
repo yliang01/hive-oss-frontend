@@ -14,6 +14,7 @@ const selectedFileKeys = new Set();
 
 let expandedFileKey = null; // 当前展开详情的行（同一时间只展开一行）
 let previewModalInstance = null;
+let viewMode = 'list'; // 'list' | 'grid'
 
 function getRowByFileKey(fileKey) {
   const tbody = document.querySelector('#file-table tbody');
@@ -135,6 +136,15 @@ function refreshSingleFile(fileKey) {
     })
     .then(fileData => {
       updateFileRow(fileKey, fileData);
+      // 同步更新全局缓存的文件列表
+      if (window.allFiles && Array.isArray(window.allFiles)) {
+        const idx = window.allFiles.findIndex(f => f.fileKey === fileKey);
+        if (idx >= 0) {
+          window.allFiles[idx] = fileData;
+        }
+      }
+      // 根据最新状态更新“确认删除”按钮
+      updateConfirmDeleteButtonState(fileData);
     })
     .catch(e => showError(e.message));
 }
@@ -263,12 +273,12 @@ function generateFileRowHTML(file) {
   return generateFileRowHTMLView(file, currentSearchKeyword);
 }
 
-// 渲染文件列表
+// 渲染文件列表（表格）
 function renderFiles(files) {
   const tbody = document.querySelector('#file-table tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
-  
-  // 新增：判断是否有DB_ONLY或TO_BE_DELETED的文件
+
   const confirmDeleteBtn = document.getElementById('sync-local-btn');
   const hasDeletable = files.some(f => f.status === 'DB_ONLY' || f.status === 'TO_BE_DELETED');
   if (confirmDeleteBtn) {
@@ -287,10 +297,97 @@ function renderFiles(files) {
 
   files.forEach(file => {
     const tr = document.createElement('tr');
-    tr.setAttribute('data-filekey', file.fileKey); // 新增：为每行添加fileKey属性
+    tr.setAttribute('data-filekey', file.fileKey);
     tr.innerHTML = generateFileRowHTML(file);
     tbody.appendChild(tr);
   });
+}
+
+// 根据当前列表或最新记录状态，更新“确认删除”按钮可用性
+function updateConfirmDeleteButtonState(latestFile) {
+  const confirmDeleteBtn = document.getElementById('sync-local-btn');
+  if (!confirmDeleteBtn) return;
+  let hasDeletable = false;
+  if (window.allFiles && Array.isArray(window.allFiles)) {
+    hasDeletable = window.allFiles.some(f => f.status === 'DB_ONLY' || f.status === 'TO_BE_DELETED');
+  } else if (latestFile) {
+    hasDeletable = latestFile.status === 'DB_ONLY' || latestFile.status === 'TO_BE_DELETED';
+  }
+  confirmDeleteBtn.disabled = !hasDeletable;
+  confirmDeleteBtn.title = hasDeletable ? '' : '没有可确认删除的文件';
+}
+
+// 渲染网格视图（缩略图优先，失败回退预览图）
+function renderFilesGrid(files) {
+  const gridEl = document.getElementById('files-grid');
+  const listWrap = document.getElementById('files-list-view');
+  const gridWrap = document.getElementById('files-grid-view');
+  if (!gridEl || !listWrap || !gridWrap) return;
+
+  const confirmDeleteBtn = document.getElementById('sync-local-btn');
+  const hasDeletable = files.some(f => f.status === 'DB_ONLY' || f.status === 'TO_BE_DELETED');
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.disabled = !hasDeletable;
+    confirmDeleteBtn.title = hasDeletable ? '' : '没有可确认删除的文件';
+  }
+
+  gridEl.innerHTML = '';
+  if (!files.length) {
+    gridEl.innerHTML = `<div class="col-12 text-center text-secondary py-5">${currentSearchKeyword.trim() ? `未找到包含"${escapeHtml(currentSearchKeyword)}"的文件` : '暂无文件'}</div>`;
+    return;
+  }
+
+  files.forEach(file => {
+    const card = document.createElement('div');
+    card.className = 'col-6 col-md-4 col-lg-3';
+    card.setAttribute('data-filekey', file.fileKey);
+    const thumbUrl = buildPreviewUrl(file.thumbnailUrl || file.previewUrl);
+    const previewUrl = buildPreviewUrl(file.previewUrl);
+    const keyEsc = escapeJsString(file.fileKey);
+    const fileNameDisplay = escapeHtml((file.fileName || file.fileKey || '').slice(0, 40)) + ((file.fileName && file.fileName.length > 40) ? '…' : '');
+    card.innerHTML = `
+      <div class="card files-grid-card h-100">
+        <div class="files-grid-card-img-wrap">
+          <img class="files-grid-card-img" src="${escapeHtmlAttr(thumbUrl)}" alt="${escapeHtmlAttr(file.fileName || file.fileKey)}"
+               data-preview-url="${escapeHtmlAttr(previewUrl)}" data-filekey="${escapeHtmlAttr(file.fileKey)}"
+               onerror="handleGridThumbError(this)">
+        </div>
+        <div class="card-body py-2">
+          <p class="card-text text-truncate small mb-1" title="${escapeHtmlAttr(file.fileName || file.fileKey)}">${fileNameDisplay}</p>
+          <div class="d-flex gap-1 flex-wrap">
+            ${file.previewable && file.previewUrl ? `<button class="btn btn-sm btn-outline-primary" onclick="previewFile('${keyEsc}')" title="预览">预览</button>` : ''}
+            <button class="btn btn-sm btn-outline-secondary" onclick="downloadFile('${keyEsc}')" ${file.downloadable === false ? 'disabled' : ''}>下载</button>
+          </div>
+        </div>
+      </div>
+    `;
+    gridEl.appendChild(card);
+  });
+}
+
+function handleGridThumbError(imgEl) {
+  const previewUrl = imgEl.getAttribute('data-preview-url');
+  const currentSrc = imgEl.getAttribute('src');
+  // 缩略图加载失败时不再回退到原图，只展示占位样式
+  imgEl.src = '';
+  imgEl.alt = '缩略图不可用';
+  imgEl.classList.add('files-grid-card-img--failed');
+}
+
+function switchViewMode(mode) {
+  viewMode = mode === 'grid' ? 'grid' : 'list';
+  const listWrap = document.getElementById('files-list-view');
+  const gridWrap = document.getElementById('files-grid-view');
+  const btnList = document.getElementById('view-mode-list');
+  const btnGrid = document.getElementById('view-mode-grid');
+  if (listWrap) listWrap.style.display = viewMode === 'list' ? '' : 'none';
+  if (gridWrap) gridWrap.style.display = viewMode === 'grid' ? '' : 'none';
+  if (btnList) btnList.classList.toggle('active', viewMode === 'list');
+  if (btnGrid) btnGrid.classList.toggle('active', viewMode === 'grid');
+  if (window.allFiles && window.allFiles.length > 0) {
+    if (viewMode === 'grid') renderFilesGrid(window.allFiles);
+    else renderFiles(window.allFiles);
+  }
 }
 
 // 获取文件列表
@@ -326,8 +423,9 @@ function listFiles() {
     .then(data => {
       if (data && Array.isArray(data.files)) {
         totalFiles = data.total || 0;
-        window.allFiles = data.files; // 缓存到全局变量
-        renderFiles(data.files);
+        window.allFiles = data.files;
+        if (viewMode === 'grid') renderFilesGrid(data.files);
+        else renderFiles(data.files);
         clearSelectedRows();
         renderPagination({
           totalPages: Math.ceil(data.total / data.pageSize),
@@ -649,6 +747,8 @@ function getPreviewBlockedMessage(blockedReason) {
       return '文件过大，暂不支持预览';
     case 'UNSUPPORTED_TYPE':
       return '当前文件类型不支持预览';
+    case 'OSS_ONLY':
+      return '仅远端存在，无解密信息不可预览';
     default:
       return '文件不可预览';
   }
@@ -1008,6 +1108,8 @@ function releaseLocalFile(fileKey, localPath) {
 }
 
 // 新增：上传相关函数
+let uploadAreaInitialized = false;
+
 function openUploadModal() {
   const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
   modal.show();
@@ -1015,6 +1117,9 @@ function openUploadModal() {
 }
 
 function setupUploadArea() {
+  if (uploadAreaInitialized) {
+    return;
+  }
   const uploadArea = document.getElementById('uploadArea');
   const fileInput = document.getElementById('fileInput');
   
@@ -1040,29 +1145,30 @@ function setupUploadArea() {
   uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      fileInput.files = files;
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      fileInput.files = transfer.files;
       handleFileSelect();
     }
   });
+
+  uploadAreaInitialized = true;
 }
 
 function handleFileSelect() {
   const fileInput = document.getElementById('fileInput');
-  const file = fileInput.files[0];
+  const file = fileInput.files && fileInput.files[0];
   const fileInfo = document.getElementById('fileInfo');
   const fileName = document.getElementById('fileName');
   const fileSize = document.getElementById('fileSize');
   const uploadBtn = document.getElementById('uploadBtn');
-  
+
   if (file) {
-    // 显示文件信息
     fileName.textContent = file.name;
     fileSize.textContent = formatSize(file.size);
     fileInfo.style.display = 'block';
-    
-    // 启用上传按钮
     uploadBtn.disabled = false;
   } else {
     fileInfo.style.display = 'none';
@@ -1086,126 +1192,91 @@ function uploadFile() {
   const uploadProgress = document.getElementById('uploadProgress');
   const progressBar = uploadProgress.querySelector('.progress-bar');
   const uploadStatus = document.getElementById('uploadStatus');
-  
-  const file = fileInput.files[0];
   const currentCategory = getCurrentCategory();
-  
+
+  const file = fileInput.files && fileInput.files[0];
   if (!file) {
     showError('请选择要上传的文件');
     return;
   }
-  
   if (!currentCategory) {
     showError('未指定分类');
     return;
   }
-  
-  // 检查文件大小（100MB限制）
-  if (file.size > 100 * 1024 * 1024) {
-    showError('文件大小不能超过100MB');
-    return;
-  }
-  
-  // 显示进度条
+
   uploadProgress.style.display = 'block';
   uploadBtn.disabled = true;
-  uploadStatus.textContent = '准备上传...';
   progressBar.style.width = '0%';
-  
-  // 创建FormData
+  uploadStatus.textContent = `准备上传 ${file.name}...`;
+
+  function parseUploadError(xhr) {
+    try {
+      const body = JSON.parse(xhr.responseText);
+      if (body && body.error) return body.error;
+    } catch (_) {}
+    switch (xhr.status) {
+      case 400: return '文件格式不支持或文件过大';
+      case 409: return '同名文件正在上传，请稍后重试';
+      case 413: return '文件大小超限';
+      default: return '上传失败';
+    }
+  }
+
   const formData = new FormData();
   formData.append('file', file);
-  
-  // 创建XMLHttpRequest以支持进度监控
   const xhr = new XMLHttpRequest();
-  
+
   xhr.upload.addEventListener('progress', (e) => {
-    if (e.lengthComputable) {
-      const percentComplete = (e.loaded / e.total) * 100;
-      progressBar.style.width = percentComplete + '%';
-      uploadStatus.textContent = `上传中... ${Math.round(percentComplete)}%`;
+    if (!e.lengthComputable) {
+      uploadStatus.textContent = `上传中... ${formatSize(e.loaded)}`;
+      return;
     }
+    const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+    progressBar.style.width = pct + '%';
+    uploadStatus.textContent = `上传中... ${pct}%（${formatSize(e.loaded)} / ${formatSize(e.total)}）`;
   });
-  
+
+  xhr.upload.addEventListener('load', () => {
+    progressBar.style.width = '99%';
+    uploadStatus.textContent = '文件已发送到后端，正在加密并完成 OSS 分片上传...';
+  });
+
   xhr.addEventListener('load', () => {
+    uploadBtn.disabled = false;
     if (xhr.status === 200) {
+      progressBar.style.width = '100%';
+      uploadStatus.textContent = '上传完成';
+      showSuccess('文件上传成功');
       try {
         const response = JSON.parse(xhr.responseText);
-        
-        progressBar.style.width = '100%';
-        uploadStatus.textContent = '上传成功！';
-        showSuccess('文件上传成功');
-        
-        // 关闭模态框
-        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
-        modal.hide();
-        
-        // 根据fileKey获取文件信息并添加到列表顶部
         if (response.fileKey) {
-          // 获取刚上传文件的详细信息
-          const currentCategory = getCurrentCategory();
           fetch(`${API_BASE}/categories/${currentCategory}/files/${response.fileKey}`)
-            .then(res => {
-              if (!res.ok) throw new Error('获取文件信息失败');
-              return res.json();
-            })
-            .then(fileData => {
-              addNewFileToTop(fileData);
-            })
-            .catch(e => {
-              console.error('获取文件信息失败:', e);
-              // 即使获取详细信息失败，也显示上传成功
-            });
+            .then(res => res.ok ? res.json() : Promise.reject(new Error('获取文件信息失败')))
+            .then(fileData => addNewFileToTop(fileData))
+            .catch(e => console.error('获取文件信息失败:', e));
         }
-        
-        // 重置表单
-        clearFileSelection();
-        uploadProgress.style.display = 'none';
-      } catch (e) {
-        showError('上传响应格式错误');
-      }
-    } else {
-      // 根据不同的HTTP状态码显示不同的错误信息
-      let errorMessage = '上传失败';
-      try {
-        const errorResponse = JSON.parse(xhr.responseText);
-        if (errorResponse.error) {
-          errorMessage = errorResponse.error;
-        }
-      } catch (e) {
-        // 如果无法解析错误响应，使用默认错误信息
-        switch (xhr.status) {
-          case 400:
-            errorMessage = '文件格式不支持或文件过大';
-            break;
-          case 409:
-            errorMessage = '文件已存在';
-            break;
-          case 413:
-            errorMessage = '文件大小超限';
-            break;
-          default:
-            errorMessage = '上传失败';
-        }
-      }
-      showError(errorMessage);
+      } catch (_) {}
+      clearFileSelection();
+      const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+      if (modal) modal.hide();
+      uploadProgress.style.display = 'none';
+      listFiles();
+      return;
     }
-    uploadBtn.disabled = false;
+
+    showError(`${file.name}: ${parseUploadError(xhr)}`);
   });
-  
+
   xhr.addEventListener('error', () => {
-    showError('网络错误，上传失败');
     uploadBtn.disabled = false;
-    uploadProgress.style.display = 'none';
+    showError(`${file.name}: 网络错误`);
   });
-  
+
   xhr.addEventListener('abort', () => {
-    showError('上传已取消');
     uploadBtn.disabled = false;
-    uploadProgress.style.display = 'none';
+    showError('上传已取消');
   });
-  
-  // 发送请求
+
   xhr.open('POST', `${API_BASE}/categories/${currentCategory}/files/upload`);
   xhr.send(formData);
 }
@@ -1300,9 +1371,12 @@ window.toggleFileSelect = toggleFileSelect;
 window.toggleSelectAll = toggleSelectAll;
 window.assignSelectedFiles = assignSelectedFiles;
 window.confirmAssignSelectedFiles = confirmAssignSelectedFiles;
+window.switchViewMode = switchViewMode;
+window.handleGridThumbError = handleGridThumbError;
 
 window.onload = () => {
   ensurePreviewModalInit();
+  switchViewMode(viewMode);
   const tbody = document.querySelector('#file-table tbody');
   if (tbody) tbody.addEventListener('click', handleFileRowClick);
   loadCategoryMetaAndGroups().finally(() => listFiles());

@@ -1,13 +1,13 @@
 # OSS 管理前端 (Vite 构建)
 
-源码目录，构建产物输出到 `../src/main/resources/static`，由 hive-oss 后端同源提供静态资源。
+源码目录，构建产物输出到 `../target/generated-resources/static`，由 Maven 打包进 `hive-oss-frontend` JAR 后通过 hive-oss 后端同源提供静态资源。
 
 ## 开发
 
 ```bash
 npm install
 npm run dev    # 开发服务器 http://localhost:3000
-npm run build  # 构建到 static/
+npm run build  # 构建到 ../target/generated-resources/static/
 ```
 
 ## 结构

@@ -4,7 +4,7 @@ export default defineConfig({
   root: __dirname,
   base: '/',
   build: {
-    outDir: '../src/main/resources/static',
+    outDir: '../target/generated-resources/static',
     emptyOutDir: true,
     rollupOptions: {
       input: {
