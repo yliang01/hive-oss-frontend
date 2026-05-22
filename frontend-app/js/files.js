@@ -57,18 +57,30 @@ function backToCategories() {
   window.location.href = window.location.origin + '/';
 }
 
+function isImageUiVariant() {
+  return categoryMeta?.uiVariant === 'image';
+}
+
+function getEffectiveViewMode(mode) {
+  return isImageUiVariant() ? 'grid' : (mode === 'grid' ? 'grid' : 'list');
+}
+
 function applyCategoryTheme() {
   const titleEl = document.getElementById('current-category');
   if (titleEl) {
     titleEl.textContent = categoryMeta?.name || currentCategory;
   }
-  document.body.classList.remove('category-image', 'category-hot', 'category-archive');
-  if (categoryMeta?.uiVariant === 'image') {
-    document.body.classList.add('category-image');
-  } else if (categoryMeta?.uiVariant === 'archive') {
-    document.body.classList.add('category-archive');
+  document.body.classList.toggle('ui-image-grid-only', isImageUiVariant());
+  const assignBtn = document.getElementById('toolbar-assign-btn');
+  const deleteBtn = document.getElementById('toolbar-grid-delete-btn');
+  if (isImageUiVariant()) {
+    if (assignBtn) assignBtn.disabled = true;
+    if (deleteBtn) deleteBtn.style.display = '';
+    switchViewMode('grid');
   } else {
-    document.body.classList.add('category-hot');
+    if (assignBtn) assignBtn.disabled = false;
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    clearGridSelection();
   }
 }
 
@@ -77,6 +89,11 @@ function loadCategoryMetaAndGroups() {
   if (!currentCategory) {
     showError('未指定分类');
     return Promise.reject(new Error('未指定分类'));
+  }
+  // 切换 category 时重置懒加载 observer
+  if (_thumbObserver) {
+    _thumbObserver.disconnect();
+    _thumbObserver = null;
   }
   const categoriesReq = fetch(`${API_BASE}/categories`)
     .then(res => {
@@ -135,13 +152,17 @@ function refreshSingleFile(fileKey) {
       return res.json();
     })
     .then(fileData => {
-      updateFileRow(fileKey, fileData);
       // 同步更新全局缓存的文件列表
       if (window.allFiles && Array.isArray(window.allFiles)) {
         const idx = window.allFiles.findIndex(f => f.fileKey === fileKey);
         if (idx >= 0) {
           window.allFiles[idx] = fileData;
         }
+      }
+      if (getEffectiveViewMode(viewMode) === 'grid' && window.allFiles && Array.isArray(window.allFiles)) {
+        renderFilesGrid(window.allFiles);
+      } else {
+        updateFileRow(fileKey, fileData);
       }
       // 根据最新状态更新“确认删除”按钮
       updateConfirmDeleteButtonState(fileData);
@@ -317,7 +338,7 @@ function updateConfirmDeleteButtonState(latestFile) {
   confirmDeleteBtn.title = hasDeletable ? '' : '没有可确认删除的文件';
 }
 
-// 渲染网格视图（缩略图优先，失败回退预览图）
+// 渲染网格视图（仅展示缩略图，无缩略图时显示占位符，原图仅在点击预览时加载）
 function renderFilesGrid(files) {
   const gridEl = document.getElementById('files-grid');
   const listWrap = document.getElementById('files-list-view');
@@ -339,51 +360,111 @@ function renderFilesGrid(files) {
 
   files.forEach(file => {
     const card = document.createElement('div');
-    card.className = 'col-6 col-md-4 col-lg-3';
+    card.className = 'col-4 col-md-3 col-lg-2';
     card.setAttribute('data-filekey', file.fileKey);
-    const thumbUrl = buildPreviewUrl(file.thumbnailUrl || file.previewUrl);
     const previewUrl = buildPreviewUrl(file.previewUrl);
     const keyEsc = escapeJsString(file.fileKey);
     const fileNameDisplay = escapeHtml((file.fileName || file.fileKey || '').slice(0, 40)) + ((file.fileName && file.fileName.length > 40) ? '…' : '');
-    card.innerHTML = `
-      <div class="card files-grid-card h-100">
-        <div class="files-grid-card-img-wrap">
-          <img class="files-grid-card-img" src="${escapeHtmlAttr(thumbUrl)}" alt="${escapeHtmlAttr(file.fileName || file.fileKey)}"
-               data-preview-url="${escapeHtmlAttr(previewUrl)}" data-filekey="${escapeHtmlAttr(file.fileKey)}"
+    const isSelected = selectedFileKeys.has(file.fileKey);
+
+    let imgAreaHtml;
+    if (file.thumbnailUrl) {
+      const thumbUrl = buildPreviewUrl(file.thumbnailUrl);
+      imgAreaHtml = `
+        <div class="files-grid-card-img-wrap" onclick="previewFile('${keyEsc}')" title="点击预览">
+          <img class="files-grid-card-img"
+               data-src="${escapeHtmlAttr(thumbUrl)}"
+               alt="${escapeHtmlAttr(file.fileName || file.fileKey)}"
+               data-preview-url="${escapeHtmlAttr(previewUrl)}"
+               data-filekey="${escapeHtmlAttr(file.fileKey)}"
+               onload="handleGridThumbLoad(this)"
                onerror="handleGridThumbError(this)">
-        </div>
+        </div>`;
+    } else if (file.thumbStatus === 'PENDING') {
+      imgAreaHtml = `<div class="files-grid-card-img-wrap files-grid-card-img-wrap--pending" onclick="previewFile('${keyEsc}')" title="点击预览"></div>`;
+    } else {
+      imgAreaHtml = `<div class="files-grid-card-img--failed-wrap"><i class="bi bi-image" style="font-size:2rem"></i></div>`;
+    }
+
+    card.innerHTML = `
+      <div class="card files-grid-card h-100${isSelected ? ' files-grid-card--selected' : ''}">
+        <div class="files-grid-card-select-check" onclick="toggleGridCardSelect('${keyEsc}')" style="cursor:pointer"><i class="bi bi-check-circle-fill"></i></div>
+        ${imgAreaHtml}
         <div class="card-body py-2">
-          <p class="card-text text-truncate small mb-1" title="${escapeHtmlAttr(file.fileName || file.fileKey)}">${fileNameDisplay}</p>
-          <div class="d-flex gap-1 flex-wrap">
-            ${file.previewable && file.previewUrl ? `<button class="btn btn-sm btn-outline-primary" onclick="previewFile('${keyEsc}')" title="预览">预览</button>` : ''}
-            <button class="btn btn-sm btn-outline-secondary" onclick="downloadFile('${keyEsc}')" ${file.downloadable === false ? 'disabled' : ''}>下载</button>
-          </div>
+          <p class="card-text text-truncate small mb-0" title="${escapeHtmlAttr(file.fileName || file.fileKey)}" onclick="toggleGridCardSelect('${keyEsc}')" style="cursor:pointer">${fileNameDisplay}</p>
         </div>
       </div>
     `;
     gridEl.appendChild(card);
   });
+
+  // 懒加载：用 IntersectionObserver 按需赋值 src
+  gridEl.querySelectorAll('img[data-src]').forEach(img => getThumbObserver().observe(img));
+
+  // 上传后高亮新图片
+  if (window._newUploadedKey) {
+    const newCard = gridEl.querySelector(`[data-filekey="${CSS.escape(window._newUploadedKey)}"]`);
+    if (newCard) {
+      newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newCard.querySelector('.card')?.classList.add('new-file-highlight');
+    }
+  }
+}
+
+function handleGridThumbLoad(imgEl) {
+  imgEl.classList.add('img-ready');
+  imgEl.closest('.files-grid-card-img-wrap')?.classList.add('loaded');
 }
 
 function handleGridThumbError(imgEl) {
-  const previewUrl = imgEl.getAttribute('data-preview-url');
-  const currentSrc = imgEl.getAttribute('src');
-  // 缩略图加载失败时不再回退到原图，只展示占位样式
-  imgEl.src = '';
-  imgEl.alt = '缩略图不可用';
-  imgEl.classList.add('files-grid-card-img--failed');
+  const wrap = imgEl.closest('.files-grid-card-img-wrap');
+  imgEl.remove();
+  if (wrap) {
+    wrap.className = 'files-grid-card-img--failed-wrap';
+    wrap.removeAttribute('onclick');
+    wrap.innerHTML = '<i class="bi bi-image" style="font-size:2rem"></i>';
+  }
+}
+
+let _thumbObserver = null;
+function getThumbObserver() {
+  if (!_thumbObserver) {
+    _thumbObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const img = entry.target;
+        const src = img.dataset.src;
+        if (src) {
+          img.src = src;
+          delete img.dataset.src;
+        }
+        _thumbObserver.unobserve(img);
+      });
+    }, { rootMargin: '200px' });
+  }
+  return _thumbObserver;
 }
 
 function switchViewMode(mode) {
-  viewMode = mode === 'grid' ? 'grid' : 'list';
+  const prevMode = viewMode;
+  viewMode = getEffectiveViewMode(mode);
+  if (prevMode === 'grid' && viewMode !== 'grid') {
+    clearGridSelection();
+  }
   const listWrap = document.getElementById('files-list-view');
   const gridWrap = document.getElementById('files-grid-view');
   const btnList = document.getElementById('view-mode-list');
   const btnGrid = document.getElementById('view-mode-grid');
   if (listWrap) listWrap.style.display = viewMode === 'list' ? '' : 'none';
   if (gridWrap) gridWrap.style.display = viewMode === 'grid' ? '' : 'none';
-  if (btnList) btnList.classList.toggle('active', viewMode === 'list');
-  if (btnGrid) btnGrid.classList.toggle('active', viewMode === 'grid');
+  if (btnList) {
+    btnList.style.display = isImageUiVariant() ? 'none' : '';
+    btnList.classList.toggle('active', viewMode === 'list');
+  }
+  if (btnGrid) {
+    btnGrid.style.display = '';
+    btnGrid.classList.toggle('active', viewMode === 'grid');
+  }
   if (window.allFiles && window.allFiles.length > 0) {
     if (viewMode === 'grid') renderFilesGrid(window.allFiles);
     else renderFiles(window.allFiles);
@@ -424,7 +505,8 @@ function listFiles() {
       if (data && Array.isArray(data.files)) {
         totalFiles = data.total || 0;
         window.allFiles = data.files;
-        if (viewMode === 'grid') renderFilesGrid(data.files);
+        const effectiveViewMode = getEffectiveViewMode(viewMode);
+        if (effectiveViewMode === 'grid') renderFilesGrid(data.files);
         else renderFiles(data.files);
         clearSelectedRows();
         renderPagination({
@@ -864,11 +946,14 @@ function deleteFile(fileKey) {
       showError('未指定分类');
       return;
     }
-    fetch(`${API_BASE}/categories/${currentCategory}/files/${fileKey}`, { method: 'DELETE' })
+    fetch(`${API_BASE}/categories/${currentCategory}/files:mark-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileKeys: [fileKey] })
+    })
       .then(res => {
         if (!res.ok) throw new Error('删除文件失败');
         showSuccess('删除操作已提交');
-        // 删除后刷新该文件的状态
         refreshSingleFile(fileKey);
       })
       .catch(e => showError(e.message));
@@ -1145,10 +1230,10 @@ function setupUploadArea() {
   uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) {
+    const droppedFiles = e.dataTransfer.files;
+    if (droppedFiles && droppedFiles.length > 0) {
       const transfer = new DataTransfer();
-      transfer.items.add(file);
+      Array.from(droppedFiles).forEach(f => transfer.items.add(f));
       fileInput.files = transfer.files;
       handleFileSelect();
     }
@@ -1159,176 +1244,201 @@ function setupUploadArea() {
 
 function handleFileSelect() {
   const fileInput = document.getElementById('fileInput');
-  const file = fileInput.files && fileInput.files[0];
-  const fileInfo = document.getElementById('fileInfo');
-  const fileName = document.getElementById('fileName');
-  const fileSize = document.getElementById('fileSize');
   const uploadBtn = document.getElementById('uploadBtn');
-
-  if (file) {
-    fileName.textContent = file.name;
-    fileSize.textContent = formatSize(file.size);
-    fileInfo.style.display = 'block';
-    uploadBtn.disabled = false;
-  } else {
-    fileInfo.style.display = 'none';
-    uploadBtn.disabled = true;
-  }
+  const uploadArea = document.getElementById('uploadArea');
+  const files = Array.from(fileInput.files || []);
+  if (!files.length) return;
+  renderUploadFileList(files);
+  uploadBtn.disabled = false;
+  const hintEl = uploadArea && uploadArea.querySelector('.upload-area-hint');
+  if (hintEl) hintEl.textContent = `已选 ${files.length} 个文件`;
 }
 
 function clearFileSelection() {
   const fileInput = document.getElementById('fileInput');
-  const fileInfo = document.getElementById('fileInfo');
+  const uploadFileList = document.getElementById('uploadFileList');
   const uploadBtn = document.getElementById('uploadBtn');
-  
+  const uploadArea = document.getElementById('uploadArea');
+
   fileInput.value = '';
-  fileInfo.style.display = 'none';
+  if (uploadFileList) {
+    uploadFileList.innerHTML = '';
+    uploadFileList.style.display = 'none';
+  }
   uploadBtn.disabled = true;
+  const hintEl = uploadArea && uploadArea.querySelector('.upload-area-hint');
+  if (hintEl) hintEl.textContent = '支持大文件流式上传';
 }
 
-function resetUploadProgress(progressBar, uploadProgress, uploadStatus, message) {
-  progressBar.style.transition = 'none';
-  progressBar.style.width = '0%';
-  uploadStatus.textContent = message;
+function parseUploadError(xhr) {
+  try {
+    const body = JSON.parse(xhr.responseText);
+    if (body && body.error) return body.error;
+  } catch (_) {}
+  switch (xhr.status) {
+    case 400: return '文件格式不支持或文件过大';
+    case 409: return '同名文件正在上传，请稍后重试';
+    case 413: return '文件大小超限';
+    default: return '上传失败';
+  }
+}
+
+function renderUploadFileList(files) {
+  const uploadFileList = document.getElementById('uploadFileList');
+  if (!uploadFileList) return;
+  uploadFileList.innerHTML = '';
+  files.forEach((file, i) => {
+    const li = document.createElement('li');
+    li.dataset.index = i;
+    li.className = 'upload-file-item d-flex align-items-center gap-2 py-1 border-bottom';
+    li.innerHTML = `
+      <span class="flex-grow-1 text-truncate small" title="${escapeHtmlAttr(file.name)}">${escapeHtml(file.name)}</span>
+      <span class="text-muted small text-nowrap">${formatSize(file.size)}</span>
+      <span class="upload-file-status badge text-bg-secondary">待上传</span>`;
+    uploadFileList.appendChild(li);
+  });
+  uploadFileList.style.display = '';
+}
+
+function setFileStatus(index, status) {
+  const uploadFileList = document.getElementById('uploadFileList');
+  if (!uploadFileList) return;
+  const li = uploadFileList.querySelector(`[data-index="${index}"]`);
+  if (!li) return;
+  const badge = li.querySelector('.upload-file-status');
+  if (!badge) return;
+  const map = {
+    uploading: ['上传中', 'text-bg-primary'],
+    done:      ['完成',   'text-bg-success'],
+    exists:    ['已存在', 'text-bg-warning'],
+    conflict:  ['冲突',   'text-bg-warning'],
+    failed:    ['失败',   'text-bg-danger'],
+  };
+  const [label, cls] = map[status] || ['待上传', 'text-bg-secondary'];
+  badge.className = `upload-file-status badge ${cls}`;
+  badge.textContent = label;
+}
+
+function updateCurrentProgress(index, fileName, pct, loaded, total) {
+  const uploadProgress = document.getElementById('uploadProgress');
+  const progressBar = uploadProgress && uploadProgress.querySelector('.progress-bar');
+  const uploadStatus = document.getElementById('uploadStatus');
+  if (!uploadProgress || !progressBar || !uploadStatus) return;
   uploadProgress.style.display = 'block';
-  progressBar.offsetHeight;
-  progressBar.style.transition = '';
+  if (pct != null) {
+    progressBar.style.width = pct + '%';
+    const sizeInfo = (loaded != null && total != null)
+      ? `（${formatSize(loaded)} / ${formatSize(total)}）` : '';
+    uploadStatus.textContent = `${fileName}: ${pct}%${sizeInfo}`;
+  } else {
+    uploadStatus.textContent = `${fileName}: 上传中...`;
+  }
 }
 
-function waitForNextFrame() {
-  return new Promise(resolve => requestAnimationFrame(resolve));
+function hideCurrentProgress() {
+  const uploadProgress = document.getElementById('uploadProgress');
+  if (uploadProgress) uploadProgress.style.display = 'none';
+}
+
+async function fetchFileData(fileKey, categoryCode) {
+  const cat = categoryCode || getCurrentCategory();
+  if (!cat || !fileKey) return null;
+  const res = await fetch(`${API_BASE}/categories/${cat}/files/${fileKey}`);
+  if (!res.ok) throw new Error('获取文件信息失败');
+  return res.json();
+}
+
+function uploadSingleFile(file, categoryCode, onProgress) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable) {
+        onProgress && onProgress(null, e.loaded, null);
+        return;
+      }
+      const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+      onProgress && onProgress(pct, e.loaded, e.total);
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      onProgress && onProgress(99, null, null);
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response.fileKey || null);
+        } catch {
+          resolve(null);
+        }
+        return;
+      }
+      reject(new Error(parseUploadError(xhr)));
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('网络错误')));
+    xhr.addEventListener('abort', () => reject(new Error('上传已取消')));
+
+    xhr.open('POST', `${API_BASE}/categories/${categoryCode}/files/upload`);
+    xhr.send(formData);
+  });
 }
 
 async function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadBtn');
-  const uploadProgress = document.getElementById('uploadProgress');
-  const progressBar = uploadProgress.querySelector('.progress-bar');
-  const uploadStatus = document.getElementById('uploadStatus');
-  const currentCategory = getCurrentCategory();
-
-  const file = fileInput.files && fileInput.files[0];
-  if (!file) {
-    showError('请选择要上传的文件');
-    return;
-  }
-  if (!currentCategory) {
-    showError('未指定分类');
-    return;
-  }
+  const files = Array.from(fileInput.files || []);
+  if (!files.length) return;
+  const cat = getCurrentCategory();
+  if (!cat) { showError('未指定分类'); return; }
 
   uploadBtn.disabled = true;
-  resetUploadProgress(progressBar, uploadProgress, uploadStatus, `准备上传 ${file.name}...`);
 
-  function parseUploadError(xhr) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    setFileStatus(i, 'uploading');
+
+    let checkBody;
     try {
-      const body = JSON.parse(xhr.responseText);
-      if (body && body.error) return body.error;
-    } catch (_) {}
-    switch (xhr.status) {
-      case 400: return '文件格式不支持或文件过大';
-      case 409: return '同名文件正在上传，请稍后重试';
-      case 413: return '文件大小超限';
-      default: return '上传失败';
+      const checkRes = await fetch(`${API_BASE}/categories/${cat}/files/upload/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name })
+      });
+      if (checkRes.status === 409) { setFileStatus(i, 'conflict'); continue; }
+      checkBody = await checkRes.json().catch(() => ({}));
+      if (!checkRes.ok) { setFileStatus(i, 'failed'); continue; }
+    } catch {
+      setFileStatus(i, 'failed');
+      continue;
     }
-  }
 
-  function finishSuccessfulUpload(fileKey, message) {
-    progressBar.style.width = '100%';
-    uploadStatus.textContent = message;
-    showSuccess(message);
-    if (fileKey) {
-      fetch(`${API_BASE}/categories/${currentCategory}/files/${fileKey}`)
-        .then(res => res.ok ? res.json() : Promise.reject(new Error('获取文件信息失败')))
-        .then(fileData => addNewFileToTop(fileData))
-        .catch(e => console.error('获取文件信息失败:', e));
-    }
-    clearFileSelection();
-    const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
-    if (modal) modal.hide();
-    uploadProgress.style.display = 'none';
-    resetUploadProgress(progressBar, uploadProgress, uploadStatus, '准备上传...');
-    uploadProgress.style.display = 'none';
-    listFiles();
-  }
-
-  try {
-    uploadStatus.textContent = `检查 ${file.name} 是否已存在...`;
-    const checkRes = await fetch(`${API_BASE}/categories/${currentCategory}/files/upload/check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name })
-    });
-    const checkBody = await checkRes.json().catch(() => ({}));
-    if (checkRes.status === 409) {
-      uploadBtn.disabled = false;
-      showError(`${file.name}: 同名文件正在上传，请稍后重试`);
-      return;
-    }
-    if (!checkRes.ok) {
-      uploadBtn.disabled = false;
-      showError(`${file.name}: ${checkBody.error || '上传预检失败'}`);
-      return;
-    }
     if (checkBody.exists) {
-      uploadBtn.disabled = false;
-      finishSuccessfulUpload(checkBody.fileKey, '文件已存在，已跳过上传');
-      return;
+      setFileStatus(i, 'exists');
+      fetchFileData(checkBody.fileKey, cat).then(data => { if (data) addNewFileToTop(data); }).catch(() => {});
+      continue;
     }
-  } catch (e) {
-    uploadBtn.disabled = false;
-    showError(`${file.name}: 上传预检失败`);
-    return;
+
+    try {
+      const fileKey = await uploadSingleFile(file, cat,
+        (pct, loaded, total) => updateCurrentProgress(i, file.name, pct, loaded, total));
+      setFileStatus(i, 'done');
+      window._newUploadedKey = fileKey;
+      const fileData = await fetchFileData(fileKey, cat).catch(() => null);
+      if (fileData) addNewFileToTop(fileData);
+    } catch {
+      setFileStatus(i, 'failed');
+    }
   }
 
-  const formData = new FormData();
-  formData.append('file', file);
-  const xhr = new XMLHttpRequest();
-  resetUploadProgress(progressBar, uploadProgress, uploadStatus, `开始上传 ${file.name}...`);
-  await waitForNextFrame();
-
-  xhr.upload.addEventListener('progress', (e) => {
-    if (!e.lengthComputable) {
-      uploadStatus.textContent = `上传中... ${formatSize(e.loaded)}`;
-      return;
-    }
-    const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
-    progressBar.style.width = pct + '%';
-    uploadStatus.textContent = `上传中... ${pct}%（${formatSize(e.loaded)} / ${formatSize(e.total)}）`;
-  });
-
-  xhr.upload.addEventListener('load', () => {
-    progressBar.style.width = '99%';
-    uploadStatus.textContent = '文件已发送到后端，正在加密并完成 OSS 分片上传...';
-  });
-
-  xhr.addEventListener('load', () => {
-    uploadBtn.disabled = false;
-    if (xhr.status === 200) {
-      try {
-        const response = JSON.parse(xhr.responseText);
-        finishSuccessfulUpload(response.fileKey, '上传完成');
-      } catch (_) {
-        finishSuccessfulUpload(null, '上传完成');
-      }
-      return;
-    }
-
-    showError(`${file.name}: ${parseUploadError(xhr)}`);
-  });
-
-  xhr.addEventListener('error', () => {
-    uploadBtn.disabled = false;
-    showError(`${file.name}: 网络错误`);
-  });
-
-  xhr.addEventListener('abort', () => {
-    uploadBtn.disabled = false;
-    showError('上传已取消');
-  });
-
-  xhr.open('POST', `${API_BASE}/categories/${currentCategory}/files/upload`);
-  xhr.send(formData);
+  hideCurrentProgress();
+  uploadBtn.disabled = false;
+  window._newUploadedKey = null;
+  listFiles();
 }
 
 // 搜索相关函数
@@ -1392,6 +1502,64 @@ function refreshFileList() {
   });
 }
 
+// ===== 网格多选 =====
+
+function updateGridSelectionUI() {
+  const count = selectedFileKeys.size;
+  const assignBtn = document.getElementById('toolbar-assign-btn');
+  const deleteBtn = document.getElementById('toolbar-grid-delete-btn');
+  const badge = document.getElementById('toolbar-grid-select-count');
+  const num = document.getElementById('toolbar-grid-select-num');
+  if (assignBtn) assignBtn.disabled = count === 0;
+  if (deleteBtn) deleteBtn.disabled = count === 0;
+  if (badge) badge.style.display = count > 0 ? '' : 'none';
+  if (num) num.textContent = count;
+}
+
+function toggleGridCardSelect(fileKey) {
+  if (!fileKey) return;
+  if (selectedFileKeys.has(fileKey)) {
+    selectedFileKeys.delete(fileKey);
+  } else {
+    selectedFileKeys.add(fileKey);
+  }
+  const gridEl = document.getElementById('files-grid');
+  if (gridEl) {
+    const cardEl = gridEl.querySelector(`[data-filekey="${CSS.escape(fileKey)}"] .card`);
+    if (cardEl) cardEl.classList.toggle('files-grid-card--selected', selectedFileKeys.has(fileKey));
+  }
+  updateGridSelectionUI();
+}
+
+function clearGridSelection() {
+  selectedFileKeys.clear();
+  const gridEl = document.getElementById('files-grid');
+  if (gridEl) {
+    gridEl.querySelectorAll('.files-grid-card--selected').forEach(el => el.classList.remove('files-grid-card--selected'));
+  }
+  updateGridSelectionUI();
+}
+
+function gridDeleteSelected() {
+  if (!selectedFileKeys.size) { showInfo('请先选择图片'); return; }
+  const cat = getCurrentCategory();
+  if (!cat) { showError('未指定分类'); return; }
+  showConfirm(`确定要删除已选的 ${selectedFileKeys.size} 张图片吗？`, () => {
+    fetch(`${API_BASE}/categories/${cat}/files:mark-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileKeys: Array.from(selectedFileKeys) })
+    })
+      .then(res => { if (!res.ok) throw new Error('批量删除失败'); })
+      .then(() => {
+        showSuccess('已标记删除');
+        clearGridSelection();
+        listFiles();
+      })
+      .catch(e => showError(e.message));
+  });
+}
+
 window.toggleExpandDetail = toggleExpandDetail;
 window.backToCategories = backToCategories;
 window.listFiles = listFiles;
@@ -1423,11 +1591,17 @@ window.assignSelectedFiles = assignSelectedFiles;
 window.confirmAssignSelectedFiles = confirmAssignSelectedFiles;
 window.switchViewMode = switchViewMode;
 window.handleGridThumbError = handleGridThumbError;
+window.handleGridThumbLoad = handleGridThumbLoad;
+window.toggleGridCardSelect = toggleGridCardSelect;
+window.clearGridSelection = clearGridSelection;
+window.gridDeleteSelected = gridDeleteSelected;
 
 window.onload = () => {
   ensurePreviewModalInit();
-  switchViewMode(viewMode);
   const tbody = document.querySelector('#file-table tbody');
   if (tbody) tbody.addEventListener('click', handleFileRowClick);
-  loadCategoryMetaAndGroups().finally(() => listFiles());
+  loadCategoryMetaAndGroups().finally(() => {
+    switchViewMode(viewMode);
+    listFiles();
+  });
 };

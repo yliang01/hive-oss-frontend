@@ -83,7 +83,7 @@ function createCategory() {
   fetch(`${API_BASE}/category-admin/categories`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, name, storageClass, enabled: true, sortOrder: 100, previewPolicy: 'DEFAULT', uiVariant: 'hot' })
+    body: JSON.stringify({ code, name, storageClass, enabled: true, sortOrder: 100, uiVariant: 'hot' })
   })
     .then(res => {
       if (!res.ok) throw new Error('创建分类失败');

@@ -54,8 +54,15 @@
                         </div>
                     </div>
                     <div class="files-toolbar__buttons">
-                        <button onclick="assignSelectedFiles()" class="btn btn-outline-primary btn-ui-secondary">
+                        <span id="toolbar-grid-select-count" class="badge text-bg-primary align-self-center" style="display:none">
+                            已选 <span id="toolbar-grid-select-num">0</span> 张
+                            <button type="button" onclick="clearGridSelection()" class="btn-close btn-close-white ms-1" aria-label="清除" style="font-size:0.55em;vertical-align:middle"></button>
+                        </span>
+                        <button id="toolbar-assign-btn" onclick="assignSelectedFiles()" class="btn btn-outline-primary btn-ui-secondary">
                             批量分配
+                        </button>
+                        <button id="toolbar-grid-delete-btn" onclick="gridDeleteSelected()" class="btn btn-outline-danger btn-ui-secondary" disabled style="display:none">
+                            删除选中
                         </button>
                         <button onclick="openUploadModal()" class="btn btn-primary btn-ui-primary">
                             <i class="bi bi-cloud-upload" aria-hidden="true"></i> 上传文件
@@ -164,25 +171,11 @@
                             <div class="upload-placeholder">
                                 <i class="bi bi-cloud-upload upload-icon"></i>
                                 <p class="upload-text">点击选择文件或拖拽文件到此处</p>
-                                <p class="upload-hint">支持大文件流式上传</p>
+                                <p class="upload-hint upload-area-hint">支持大文件流式上传</p>
                             </div>
-                            <input type="file" id="fileInput" class="form-control" style="display: none;" accept="*/*">
+                            <input type="file" id="fileInput" class="form-control" style="display: none;" accept="*/*" multiple>
                         </div>
-                        <div id="fileInfo" class="mt-2" style="display: none;">
-                            <div class="alert alert-info">
-                                <div class="d-flex align-items-center">
-                                    <i class="bi bi-file-earmark me-2"></i>
-                                    <div class="flex-grow-1">
-                                        <strong id="fileName"></strong>
-                                        <br>
-                                        <small id="fileSize" class="text-muted"></small>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearFileSelection()">
-                                        <i class="bi bi-x"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <ul id="uploadFileList" class="upload-file-list list-unstyled mb-2 mt-2" style="display:none"></ul>
                     </div>
 
                 </form>
@@ -223,6 +216,7 @@
         </div>
     </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module" src="../js/files.js"></script>
 <div id="download-progress-bar"

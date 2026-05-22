@@ -128,7 +128,6 @@ export function renderCategoryList(containerEl, categories, onCategoryClick) {
       <div class="d-flex justify-content-between align-items-start gap-2">
         <div>
           <div class="fw-semibold">${category.name || category.code || '-'}</div>
-          <div class="text-muted small">${category.description || ''}</div>
         </div>
         <span class="badge text-bg-light">${category.code || '-'}</span>
       </div>
