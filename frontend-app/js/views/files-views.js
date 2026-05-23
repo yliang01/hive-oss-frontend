@@ -74,7 +74,8 @@ function getPreviewBlockedMessage(blockedReason) {
   }
 }
 
-function buildPreviewButton(file, keyEsc) {
+function buildPreviewButton(file, keyEsc, options = {}) {
+  if (options.hidePreview) return '';
   if (file.previewable && file.previewUrl) {
     return `<button class="btn btn-sm btn-outline-primary preview-btn" onclick="previewFile('${keyEsc}')" title="在线预览">预览</button>`;
   }
@@ -85,7 +86,7 @@ function buildPreviewButton(file, keyEsc) {
 /**
  * 生成单行文件表格 HTML。currentSearchKeyword 用于搜索高亮。
  */
-export function generateFileRowHTML(file, currentSearchKeyword) {
+export function generateFileRowHTML(file, currentSearchKeyword, options = {}) {
   const kw = (currentSearchKeyword || '').trim();
   const keyEsc = escapeJsString(file.fileKey);
   const keyAttr = escapeHtmlAttr(file.fileKey);
@@ -119,7 +120,6 @@ export function generateFileRowHTML(file, currentSearchKeyword) {
         <i class="bi bi-info-circle"></i> Key详情
       </button>
     </td>
-    <td>${file.zipped ? '是' : '否'}</td>
     <td>${formatSize(file.size)}</td>
     <td>${file.status}</td>
     <td>${formatDate(file.updateTime)}</td>
@@ -129,7 +129,7 @@ export function generateFileRowHTML(file, currentSearchKeyword) {
       <div class="file-actions-row d-flex flex-row align-items-center gap-2">
         <button class="btn btn-sm btn-ui-compact btn-warning unfreeze-btn" onclick="unfreezeFile('${keyEsc}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
         <button class="btn btn-sm btn-ui-compact btn-primary download-btn" data-filekey="${keyAttr}" onclick="downloadFile('${keyEsc}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
-        ${buildPreviewButton(file, keyEsc)}
+        ${buildPreviewButton(file, keyEsc, options)}
         <button class="btn btn-sm btn-ui-compact btn-danger" onclick="deleteFile('${keyEsc}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
       </div>
       <div class="file-actions-row d-flex flex-row align-items-center gap-2">

@@ -61,8 +61,18 @@ function isImageUiVariant() {
   return categoryMeta?.uiVariant === 'image';
 }
 
+function isArchiveUiVariant() {
+  return categoryMeta?.uiVariant === 'archive';
+}
+
+function isFileUiVariant() {
+  return categoryMeta?.uiVariant === 'file';
+}
+
 function getEffectiveViewMode(mode) {
-  return isImageUiVariant() ? 'grid' : (mode === 'grid' ? 'grid' : 'list');
+  if (isImageUiVariant()) return 'grid';
+  if (isArchiveUiVariant() || isFileUiVariant()) return 'list';
+  return mode === 'grid' ? 'grid' : 'list';
 }
 
 function applyCategoryTheme() {
@@ -74,13 +84,17 @@ function applyCategoryTheme() {
   const assignBtn = document.getElementById('toolbar-assign-btn');
   const deleteBtn = document.getElementById('toolbar-grid-delete-btn');
   if (isImageUiVariant()) {
-    if (assignBtn) assignBtn.disabled = true;
+    if (assignBtn) assignBtn.disabled = false;
     if (deleteBtn) deleteBtn.style.display = '';
     switchViewMode('grid');
-  } else {
+  } else if (isArchiveUiVariant()) {
     if (assignBtn) assignBtn.disabled = false;
     if (deleteBtn) deleteBtn.style.display = 'none';
-    clearGridSelection();
+    switchViewMode('list');
+  } else if (isFileUiVariant()) {
+    if (assignBtn) assignBtn.disabled = false;
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    switchViewMode('list');
   }
 }
 
@@ -291,7 +305,7 @@ function copyToClipboardWithFeedback(text, buttonEl, doneText) {
 }
 
 function generateFileRowHTML(file) {
-  return generateFileRowHTMLView(file, currentSearchKeyword);
+  return generateFileRowHTMLView(file, currentSearchKeyword, { hidePreview: isArchiveUiVariant() });
 }
 
 // 渲染文件列表（表格）
@@ -462,7 +476,7 @@ function switchViewMode(mode) {
     btnList.classList.toggle('active', viewMode === 'list');
   }
   if (btnGrid) {
-    btnGrid.style.display = '';
+    btnGrid.style.display = (isArchiveUiVariant() || isFileUiVariant()) ? 'none' : '';
     btnGrid.classList.toggle('active', viewMode === 'grid');
   }
   if (window.allFiles && window.allFiles.length > 0) {
@@ -888,7 +902,7 @@ function openPreviewModal(file) {
 
   if (mimeType.startsWith('image/')) {
     contentEl.innerHTML = `<img class="preview-image" src="${escapeHtmlAttr(previewUrl)}" alt="${escapeHtmlAttr(file.fileName || file.fileKey || 'preview-image')}">`;
-  } else if (mimeType === 'application/pdf' || mimeType.startsWith('text/')) {
+  } else if (mimeType === 'application/pdf' || mimeType === 'application/json' || mimeType.startsWith('text/')) {
     contentEl.innerHTML = `<iframe class="preview-frame" src="${escapeHtmlAttr(previewUrl)}" title="${escapeHtmlAttr(file.fileName || file.fileKey || 'preview-frame')}"></iframe>`;
   } else {
     contentEl.innerHTML = `
