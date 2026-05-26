@@ -1,6 +1,6 @@
 # OSS 管理前端
 
-基于原生技术栈（HTML + CSS + JavaScript）的 OSS 管理系统前端。
+基于 Vue 3、Vue Router、Pinia、Element Plus 和 Vite 的 OSS 管理系统前端。
 
 本模块为独立 Maven 模块 `hive-oss-frontend`，仅包含静态资源；由 `hive-oss` 后端依赖本模块 JAR，在运行时从 classpath 提供静态资源（同源、同一端口）。
 
@@ -11,15 +11,14 @@
 
 ```
 frontend-app/
-├── index.html, pages/files.html   # 多页入口
-├── js/home.js, files.js, utils.js
-├── css/style.css
+├── index.html                    # Vue SPA 入口
+├── src/                          # Vue 源码
 ├── public/serve.json
 ├── vite.config.js
 └── package.json
 
 target/generated-resources/static/（构建后）
-├── index.html, pages/files.html
+├── index.html
 ├── assets/*.js, *.css
 └── serve.json
 ```
@@ -29,9 +28,9 @@ target/generated-resources/static/（构建后）
 ```bash
 # 推荐：在 frontend-app 中开发与构建
 cd frontend-app
-npm install
+npm ci
 npm run dev    # 开发服务器 http://localhost:3000
-npm run build # 产出写入 ../target/generated-resources/static/
+npm run build  # 先类型检查，再产出到 ../target/generated-resources/static/
 
 # 或直接由 Maven 安装/更新依赖、构建并打包静态资源
 cd ..
@@ -44,13 +43,15 @@ npx serve . --config serve.json
 
 ## 访问地址
 
-- **首页（推荐入口）**：开发时 http://localhost:3000/index.html ；运行 hive-oss 应用时 http://localhost:8080/index.html 。首页包含「数据库备份与恢复」（触发备份、查看 ACK、备份历史、按批次恢复）与「Bucket 选择」。
-- 文件管理页：http://localhost:3000/pages/files.html?bucket=xxx（开发）/ http://localhost:8080/pages/files.html?bucket=xxx（应用）。
+- **首页（推荐入口）**：开发时 http://localhost:3000/index.html ；运行 hive-oss 应用时 http://localhost:8080/index.html 。首页包含数据库备份/恢复与文件分类入口。
+- **文件管理页**：`/#/files/{category}`，例如 http://localhost:3000/#/files/PHOTO 。
+- **分类管理页**：`/#/admin/categories`。
 
 ## 技术栈
 
-- 原生 JavaScript (ES Modules)
-- Bootstrap 5.3.2
+- Vue 3 + Vue Router + Pinia
+- Element Plus
+- TypeScript + Vite
 - RESTful API（后端 hive-oss）
 
 ## 接口文档
@@ -61,9 +62,9 @@ npx serve . --config serve.json
 
 在确保逻辑无变更的前提下，建议按下列链路逐项验证行为与 API/轮询一致：
 
-- **首页**：备份（触发 → 轮询 ACK → 完成/失败）、刷新备份列表、恢复（单批次 → 轮询 → 完成/失败）、Bucket 列表刷新、点击 Bucket 跳转文件页。
+- **首页**：备份（触发 → 轮询 ACK → 完成/失败）、刷新备份列表、恢复（单批次 → 轮询 → 完成/失败）、分类列表刷新、点击分类跳转文件页。
 - **文件页**：列表加载与分页、搜索与清除、上传（选文件 → 进度 → 成功/失败）、下载（任务 → 轮询 → 下载）、解冻（轮询）、删除、确认删除、远程同步、返回首页。
-- **通用**：通知与确认弹窗的触发与关闭、所有 `window.*` 暴露的入口（如 `handleBackup`、`refreshFileList` 等）与 HTML `onclick` 对应无误。
+- **通用**：通知与确认弹窗的触发与关闭、hash 路由跳转、构建产物静态资源加载。
 
 ## 首页任务状态展示（备份/恢复）
 

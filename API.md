@@ -93,9 +93,11 @@
 
 > Deprecated：兼容接口。建议统一使用 `GET /categories/{category}/files` 并通过 `keyword` 查询参数搜索。
 
-### 7. 获取单个文件
+### 7. 批量获取文件详情
 
-`GET /categories/{category}/files/{fileKey}`
+`GET /categories/{category}/files:batch-get?fileKeys=key1&fileKeys=key2`
+
+说明：前端在标记删除、解冻、下载、本地释放等操作后，用该接口按 `fileKey` 批量刷新当前列表中的记录状态。旧的单文件详情接口 `GET /categories/{category}/files/{fileKey}` 已下线。
 
 ### 8. 预览文件
 
@@ -103,17 +105,45 @@
 
 说明：前端通过文件详情中的 `previewUrl` 字段间接访问该地址（`img/iframe src`），不是 `fetch/xhr` 显式调用。
 
-### 9. 删除文件
+### 9. 标记删除文件
 
-`DELETE /categories/{category}/files/{fileKey}`
+`POST /categories/{category}/files:mark-delete`
+
+请求体：
+
+```json
+{
+  "fileKeys": ["key1", "key2"]
+}
+```
+
+说明：前端统一通过选中文件后批量标记删除，不再使用单文件 DELETE 接口。
 
 ### 10. 解冻文件
 
 `POST /categories/{category}/files/unfreeze/{fileKey}`
 
+响应体示例：
+
+```json
+{
+  "status": "IN_PROGRESS",
+  "unfreezeTime": null
+}
+```
+
 ### 11. 查询解冻状态
 
 `GET /categories/{category}/files/unfreeze-status/{fileKey}`
+
+响应体示例：
+
+```json
+{
+  "status": "COMPLETED",
+  "unfreezeTime": "2026-05-27T10:00:00"
+}
+```
 
 ### 12. 创建下载任务
 
@@ -143,7 +173,7 @@
 
 ## 同步能力
 
-### 16. 确认删除
+### 16. 确认删除已标记文件
 
 `POST /categories/{category}/files/confirm-delete`
 
@@ -165,3 +195,4 @@
 - `hive-oss/docs/modules/003_index_and_constraints.sql`
 - `hive-oss/docs/modules/004_safe_cleanup.sql`
 
+Restore status schema changes are managed by Flyway under `hive-oss/src/main/resources/db/migration/`.
