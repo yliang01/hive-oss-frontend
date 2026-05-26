@@ -396,6 +396,8 @@ function renderFilesGrid(files) {
         </div>`;
     } else if (file.thumbStatus === 'PENDING') {
       imgAreaHtml = `<div class="files-grid-card-img-wrap files-grid-card-img-wrap--pending" onclick="previewFile('${keyEsc}')" title="点击预览"></div>`;
+    } else if (file.previewUrl) {
+      imgAreaHtml = `<div class="files-grid-card-img-wrap files-grid-card-img-wrap--pending" onclick="previewFile('${keyEsc}')" title="点击预览原图"></div>`;
     } else {
       imgAreaHtml = `<div class="files-grid-card-img--failed-wrap"><i class="bi bi-image" style="font-size:2rem"></i></div>`;
     }
