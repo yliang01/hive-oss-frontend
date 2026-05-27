@@ -14,13 +14,34 @@
             <span>共 {{ store.total }} 个对象，当前第 {{ store.currentPage }} 页</span>
           </p>
         </div>
-        <div class="hero-actions">
-          <el-button type="primary" size="large" @click="uploadVisible = true">
-            <el-icon><Upload /></el-icon>上传文件
-          </el-button>
-          <el-button size="large" :loading="syncLoading" @click="doSync">
-            <el-icon><Refresh /></el-icon>同步远端
-          </el-button>
+        <div class="hero-side">
+          <div class="hero-actions">
+            <el-button type="primary" size="large" @click="uploadVisible = true">
+              <el-icon><Upload /></el-icon>上传文件
+            </el-button>
+            <el-button size="large" :loading="syncLoading" @click="doSync">
+              <el-icon><Refresh /></el-icon>扫描云端
+            </el-button>
+          </div>
+
+          <div class="sync-compact" :class="syncStatusClass">
+            <span class="sync-dot" />
+            <div class="sync-copy">
+              <div class="sync-compact-title">{{ syncCompactTitle }}</div>
+              <div class="sync-compact-meta">{{ syncCompactMeta }}</div>
+            </div>
+            <el-popover placement="bottom-end" trigger="click" width="280">
+              <template #reference>
+                <el-button link size="small">详情</el-button>
+              </template>
+              <div class="sync-detail-list">
+                <div v-for="row in syncDetailRows" :key="row.label" class="sync-detail-row">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
+              </div>
+            </el-popover>
+          </div>
         </div>
       </header>
 
@@ -68,15 +89,15 @@
           </el-badge>
 
           <el-button size="small" type="danger" plain :disabled="!selectedDeletableKeys.length" @click="deleteSelected">
-            <el-icon><Delete /></el-icon>删除所选
+            <el-icon><Delete /></el-icon>标记删除
           </el-button>
 
-          <el-button size="small" :disabled="!store.hasDeletable" title="确认删除已标记文件" @click="confirmDeleteAll">
-            <el-icon><Check /></el-icon>确认删除
+          <el-button size="small" :disabled="!store.hasPendingDelete" title="执行删除已标记文件" @click="confirmDeleteAll">
+            <el-icon><Check /></el-icon>执行删除
           </el-button>
 
-          <el-button size="small" :loading="store.isLoading" @click="store.loadFiles(store.currentPage)">
-            <el-icon><RefreshRight /></el-icon>刷新
+          <el-button size="small" :loading="store.isLoading" @click="store.refreshPage()">
+            <el-icon><RefreshRight /></el-icon>刷新列表
           </el-button>
         </div>
       </div>
@@ -123,19 +144,22 @@
           </el-table-column>
 
           <el-table-column label="大小" width="90" :formatter="(r) => formatSize(r.size)" />
-          <el-table-column label="状态" width="130">
+          <el-table-column label="同步状态" width="140">
             <template #default="{ row }">
               <el-tag size="small" :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="删除策略" width="110">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.deletable ? 'warning' : 'info'" effect="plain">
+                {{ row.deletable ? '可标记删除' : '受保护' }}
+              </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="更新时间" width="140" :formatter="(r) => formatDate(r.updateTime)" />
           <el-table-column label="解冻时间" width="140">
             <template #default="{ row }">{{ row.unfreezeTime ? formatDate(row.unfreezeTime) : '-' }}</template>
           </el-table-column>
-          <el-table-column label="分组" width="100">
-            <template #default="{ row }">{{ row.groupName || '-' }}</template>
-          </el-table-column>
-
           <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
               <div class="action-cell">
@@ -294,6 +318,62 @@ const selectedDeletableKeys = computed(() => store.files
   .filter(file => file.deletable && store.selectedKeys.has(file.fileKey))
   .map(file => file.fileKey))
 
+const syncStatusClass = computed(() => {
+  if (syncLoading.value) return 'sync-compact--running'
+  const meta = store.categoryMeta
+  if (!meta?.lastSyncTime) return 'sync-compact--empty'
+  if (meta.lastSyncStatus === 'FAILED') return 'sync-compact--failed'
+  return 'sync-compact--success'
+})
+
+const syncCompactTitle = computed(() => {
+  if (syncLoading.value) return '云端扫描：扫描中'
+  const meta = store.categoryMeta
+  if (!meta?.lastSyncTime) return '云端扫描：尚未扫描'
+  if (meta.lastSyncStatus === 'FAILED') return '云端扫描失败'
+  return `云端扫描：${formatDate(meta.lastSyncTime)}`
+})
+
+const syncCompactMeta = computed(() => {
+  if (syncLoading.value) return '完成后自动刷新列表'
+  const meta = store.categoryMeta
+  if (!meta?.lastSyncTime) return '点击“扫描云端”同步云端文件状态'
+  if (meta.lastSyncStatus === 'FAILED') return `${formatDate(meta.lastSyncTime)} · 查看详情`
+  return `云端 ${meta.lastSyncOssTotal ?? 0} · 仅云端 ${meta.lastSyncOssOnly ?? 0} · 异常 ${meta.lastSyncOssToDbMismatched ?? 0}`
+})
+
+const syncDetailRows = computed(() => {
+  const meta = store.categoryMeta
+  if (syncLoading.value) {
+    return [
+      { label: '状态', value: '同步中' },
+      { label: '说明', value: '同步完成后会自动刷新列表和统计摘要' },
+    ]
+  }
+  if (!meta?.lastSyncTime) {
+    return [
+      { label: '状态', value: '尚未扫描' },
+      { label: '说明', value: '点击“扫描云端”同步云端文件状态' },
+    ]
+  }
+  const rows = [
+    { label: '状态', value: meta.lastSyncStatus === 'FAILED' ? '失败' : '成功' },
+    { label: '时间', value: formatDate(meta.lastSyncTime) },
+  ]
+  if (meta.lastSyncStatus === 'FAILED') {
+    rows.push({ label: '错误', value: meta.lastSyncMessage || '请检查后端日志' })
+    return rows
+  }
+  rows.push(
+    { label: '云端文件', value: String(meta.lastSyncOssTotal ?? 0) },
+    { label: '已匹配', value: String(meta.lastSyncOssToDbMatched ?? 0) },
+    { label: '仅云端', value: String(meta.lastSyncOssOnly ?? 0) },
+    { label: '状态异常', value: String(meta.lastSyncOssToDbMismatched ?? 0) },
+    { label: '仅本地记录', value: String(meta.lastSyncDbToOssMismatched ?? 0) },
+  )
+  return rows
+})
+
 function buildUrl(raw: string | undefined) {
   if (!raw) return ''
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
@@ -325,10 +405,10 @@ function variantLabel(variant: string | undefined) {
 
 function statusLabel(status: string | undefined) {
   const map: Record<string, string> = {
-    UPLOADED: '已上传',
+    UPLOADED: '云端已匹配',
     OSS_ONLY: '仅远端',
-    DB_ONLY: '仅数据库',
-    TO_BE_DELETED: '待删除',
+    DB_ONLY: '仅本地记录',
+    TO_BE_DELETED: '等待执行删除',
     UPLOADING: '上传中',
   }
   return status ? map[status] || status : '-'
@@ -397,7 +477,11 @@ async function doAssign() {
 }
 
 async function confirmDelete(fileKeys: string[]) {
-  await ElMessageBox.confirm(`确认删除 ${fileKeys.length} 个文件？`, '确认删除', { type: 'warning' })
+  await ElMessageBox.confirm(
+    `已选择 ${store.selectedKeys.size} 个文件，其中 ${fileKeys.length} 个允许删除。确认将这 ${fileKeys.length} 个文件标记为待删除？`,
+    '标记删除',
+    { type: 'warning' }
+  )
   await store.deleteFiles(fileKeys)
 }
 
@@ -410,7 +494,7 @@ async function deleteSelected() {
 }
 
 async function confirmDeleteAll() {
-  await ElMessageBox.confirm('确认删除所有已标记文件？此操作不可撤销。', '确认', { type: 'warning' })
+  await ElMessageBox.confirm('确认删除所有“等待执行删除”的文件？此操作不可撤销。', '确认', { type: 'warning' })
   await store.confirmDeleteAll()
 }
 
@@ -421,8 +505,11 @@ async function confirmRelease(fileKey: string) {
 
 async function doSync() {
   syncLoading.value = true
-  await store.syncRemote()
-  syncLoading.value = false
+  try {
+    await store.syncRemote()
+  } finally {
+    syncLoading.value = false
+  }
 }
 
 async function copy(text: string) {
@@ -458,7 +545,49 @@ onUnmounted(() => {
 <style scoped>
 .files-hero { margin-bottom: 16px; }
 .back-button { padding-left: 0; margin-bottom: 8px; color: var(--hive-muted); }
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: min(360px, 100%);
+}
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.sync-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(360px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--hive-border-soft);
+  border-radius: 14px;
+  background: var(--hive-surface);
+  box-shadow: var(--hive-shadow-soft);
+  backdrop-filter: blur(10px);
+}
+.sync-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--hive-subtle);
+  box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.14);
+}
+.sync-copy { min-width: 0; flex: 1 1 auto; }
+.sync-compact-title { font-size: 0.86rem; font-weight: 800; color: var(--hive-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-compact-meta { margin-top: 2px; font-size: 0.78rem; color: var(--hive-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-compact--success .sync-dot { background: var(--hive-success); box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14); }
+.sync-compact--failed .sync-dot { background: var(--hive-danger); box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14); }
+.sync-compact--running .sync-dot { background: var(--hive-primary); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16); animation: pulse-dot 1.2s infinite ease-in-out; }
+.sync-compact--empty .sync-dot { background: var(--hive-subtle); }
+.sync-detail-list { display: grid; gap: 9px; }
+.sync-detail-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; font-size: 0.86rem; }
+.sync-detail-row span { color: var(--hive-muted); }
+.sync-detail-row strong { color: var(--hive-text); text-align: right; word-break: break-word; }
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.72); opacity: 0.72; }
+}
 .toolbar {
   display: flex;
   align-items: center;
@@ -599,7 +728,8 @@ onUnmounted(() => {
 .text-muted { color: var(--hive-muted); }
 .small { font-size: 0.875rem; }
 @media (max-width: 760px) {
-  .toolbar-filter, .toolbar-actions, .hero-actions { width: 100%; }
+  .toolbar-filter, .toolbar-actions, .hero-actions, .hero-side, .sync-compact { width: 100%; }
+  .hero-side { align-items: stretch; }
   .toolbar-filter { flex-direction: column; }
   .search-input, .group-select { width: 100%; }
 }

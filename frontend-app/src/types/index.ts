@@ -5,6 +5,14 @@ export interface Category {
   enabled: boolean
   sortOrder: number
   uiVariant: 'image' | 'archive' | 'file'
+  lastSyncTime?: string
+  lastSyncStatus?: 'SUCCESS' | 'FAILED'
+  lastSyncOssTotal?: number
+  lastSyncOssOnly?: number
+  lastSyncOssToDbMatched?: number
+  lastSyncOssToDbMismatched?: number
+  lastSyncDbToOssMismatched?: number
+  lastSyncMessage?: string
 }
 
 export interface Group {
@@ -73,6 +81,9 @@ export interface UnfreezeTaskStatus {
 }
 
 export interface SyncResult {
+  status?: 'SUCCESS' | 'FAILED'
+  syncedAt?: string
+  message?: string
   ossTotal: number
   ossOnly: number
   ossToDbMatched: number

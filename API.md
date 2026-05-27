@@ -12,6 +12,8 @@
 
 `GET /categories`
 
+分类对象包含上次远端同步摘要字段：`lastSyncTime`、`lastSyncStatus`、`lastSyncOssTotal`、`lastSyncOssOnly`、`lastSyncOssToDbMatched`、`lastSyncOssToDbMismatched`、`lastSyncDbToOssMismatched`、`lastSyncMessage`。
+
 ### 2. 获取分类下分组列表
 
 `GET /categories/{category}/groups`
@@ -180,6 +182,22 @@
 ### 17. 远程同步
 
 `POST /categories/{category}/files/sync-remote`
+
+响应体：
+
+```json
+{
+  "status": "SUCCESS",
+  "syncedAt": "2026-05-27T19:30:00",
+  "ossTotal": 123,
+  "ossOnly": 4,
+  "ossToDbMatched": 118,
+  "ossToDbMismatched": 1,
+  "dbToOssMismatched": 0
+}
+```
+
+同步摘要会持久化到分类记录；页面刷新通过 `GET /categories` 读取上次同步结果。
 
 ## 数据库备份与恢复（保持不变）
 

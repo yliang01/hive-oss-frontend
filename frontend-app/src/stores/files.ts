@@ -32,7 +32,7 @@ export const useFilesStore = defineStore('files', () => {
   const taskRunId = ref(0)
 
   const totalPages = computed(() => Math.ceil(total.value / PAGE_SIZE))
-  const hasDeletable = computed(() => files.value.some(f => f.status === 'DB_ONLY' || f.status === 'TO_BE_DELETED'))
+  const hasPendingDelete = computed(() => files.value.some(f => f.status === 'TO_BE_DELETED'))
   const selectedList = computed(() => Array.from(selectedKeys.value))
   const isImageVariant = computed(() => categoryMeta.value?.uiVariant === 'image')
   const isArchiveVariant = computed(() => categoryMeta.value?.uiVariant === 'archive')
@@ -132,10 +132,15 @@ export const useFilesStore = defineStore('files', () => {
       const res = await filesApi.syncRemote(category.value)
       const d = res.data
       ElMessage.success(`远程同步完成！OSS总数: ${d.ossTotal}, OSS独有: ${d.ossOnly}`)
-      await loadFiles(currentPage.value)
+      await Promise.all([loadMeta(), loadFiles(currentPage.value)])
     } catch (e: any) {
       ElMessage.error(e.response?.data?.error ?? '远程同步失败')
+      await loadMeta()
     }
+  }
+
+  async function refreshPage() {
+    await Promise.all([loadMeta(), loadFiles(currentPage.value)])
   }
 
   async function downloadFile(fileKey: string) {
@@ -302,9 +307,9 @@ export const useFilesStore = defineStore('files', () => {
     category, categoryMeta, groups,
     files, total, currentPage, keyword, groupFilter, isLoading, viewMode,
     selectedKeys, downloadStates, unfreezeStates,
-    totalPages, hasDeletable, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
+    totalPages, hasPendingDelete, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
     init, loadFiles, loadMeta, refreshFiles,
-    deleteFiles, confirmDeleteAll, syncRemote,
+    deleteFiles, confirmDeleteAll, syncRemote, refreshPage,
     downloadFile, unfreezeFile, releaseLocal, assignToGroup,
     toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
   }
