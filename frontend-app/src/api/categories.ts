@@ -16,9 +16,6 @@ export const adminCreateCategory = (data: Partial<Category>) =>
 export const adminUpdateCategory = (data: Partial<Category>) =>
   client.put<Category>('/categories', data)
 
-export const adminDisableCategory = (code: string) =>
-  client.post(`/categories/${code}/disable`)
-
 export const adminDeleteCategory = (code: string) =>
   client.delete(`/categories/${code}`)
 

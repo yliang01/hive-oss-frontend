@@ -48,7 +48,7 @@
                 <template #default="{ row }">
                   <el-button link size="small" @click="selectCategory(row.code)">分组</el-button>
                   <el-button link size="small" @click="openCategoryDialog(row)">编辑</el-button>
-                  <el-button link size="small" type="warning" @click="disableCategory(row.code)">停用</el-button>
+                  <el-button link size="small" :type="row.enabled ? 'warning' : 'success'" @click="toggleCategoryEnabled(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
                   <el-button link size="small" type="danger" @click="deleteCategory(row.code)">删除</el-button>
                 </template>
               </el-table-column>
@@ -255,14 +255,15 @@ async function saveCategory() {
   }
 }
 
-async function disableCategory(code: string) {
-  await ElMessageBox.confirm(`确认停用分类 ${code}？`, '确认', { type: 'warning' })
+async function toggleCategoryEnabled(row: Category) {
+  const action = row.enabled ? '停用' : '启用'
+  await ElMessageBox.confirm(`确认${action}分类 ${row.code}？`, '确认', { type: 'warning' })
   try {
-    await catApi.adminDisableCategory(code)
-    ElMessage.success('已停用')
+    await catApi.adminUpdateCategory({ ...row, enabled: !row.enabled })
+    ElMessage.success(`已${action}`)
     await loadCategories()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error ?? '停用失败')
+    ElMessage.error(e.response?.data?.error ?? `${action}失败`)
   }
 }
 
