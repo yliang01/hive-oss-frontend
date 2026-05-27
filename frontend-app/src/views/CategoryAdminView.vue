@@ -105,6 +105,9 @@
         <el-form-item label="名称" required>
           <el-input v-model="catForm.name" placeholder="显示名称" />
         </el-form-item>
+        <el-form-item label="Bucket" required>
+          <el-input v-model="catForm.bucketName" :disabled="!!editingCategory" placeholder="OSS bucket 名称（创建后不可修改）" />
+        </el-form-item>
         <el-form-item label="存储层">
           <el-select v-model="catForm.storageClass" style="width:100%">
             <el-option label="STANDARD（标准）" value="STANDARD" />
@@ -166,14 +169,14 @@ const selectedCat = ref('')
 
 const selectedCategory = computed(() => categories.value.find(c => c.code === selectedCat.value) || null)
 
-type CategoryForm = Pick<Category, 'code' | 'name' | 'storageClass' | 'uiVariant' | 'sortOrder' | 'enabled'>
+type CategoryForm = Pick<Category, 'code' | 'name' | 'bucketName' | 'storageClass' | 'uiVariant' | 'sortOrder' | 'enabled'>
 type GroupForm = Pick<Group, 'groupCode' | 'groupName' | 'sortOrder' | 'enabled'>
 
 // Category dialog
 const catDialogVisible = ref(false)
 const catSaving = ref(false)
 const editingCategory = ref<Category | null>(null)
-const catForm = ref<CategoryForm>({ code: '', name: '', storageClass: 'STANDARD', uiVariant: 'file', sortOrder: 100, enabled: true })
+const catForm = ref<CategoryForm>({ code: '', name: '', bucketName: '', storageClass: 'STANDARD', uiVariant: 'file', sortOrder: 100, enabled: true })
 
 // Group dialog
 const groupDialogVisible = ref(false)
@@ -224,19 +227,20 @@ function variantLabel(variant: string | undefined) {
 function openCategoryDialog(cat?: Category) {
   editingCategory.value = cat || null
   if (cat) {
-    catForm.value = { code: cat.code, name: cat.name, storageClass: cat.storageClass, uiVariant: cat.uiVariant, sortOrder: cat.sortOrder, enabled: cat.enabled }
+    catForm.value = { code: cat.code, name: cat.name, bucketName: cat.bucketName, storageClass: cat.storageClass, uiVariant: cat.uiVariant, sortOrder: cat.sortOrder, enabled: cat.enabled }
   } else {
-    catForm.value = { code: '', name: '', storageClass: 'STANDARD', uiVariant: 'file', sortOrder: 100, enabled: true }
+    catForm.value = { code: '', name: '', bucketName: '', storageClass: 'STANDARD', uiVariant: 'file', sortOrder: 100, enabled: true }
   }
   catDialogVisible.value = true
 }
 
 async function saveCategory() {
   if (!catForm.value.code || !catForm.value.name) { ElMessage.warning('编码和名称必填'); return }
+  if (!editingCategory.value && !catForm.value.bucketName) { ElMessage.warning('Bucket 必填'); return }
   catSaving.value = true
   try {
     if (editingCategory.value) {
-      await catApi.adminUpdateCategory(catForm.value.code, catForm.value)
+      await catApi.adminUpdateCategory(catForm.value)
       ElMessage.success('更新成功')
     } else {
       await catApi.adminCreateCategory(catForm.value)

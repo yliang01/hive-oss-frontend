@@ -1,6 +1,7 @@
 export interface Category {
   code: string
   name: string
+  bucketName: string
   storageClass: string
   enabled: boolean
   sortOrder: number
