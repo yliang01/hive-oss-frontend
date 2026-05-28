@@ -5,15 +5,6 @@
         <div>
           <div class="ops-kicker">Hive Cloud Ops</div>
           <h1 class="ops-title">OSS 管理控制台</h1>
-          <p class="ops-subtitle">统一管理对象存储文件、分类分组和数据库备份恢复任务，面向日常运维的轻量控制台。</p>
-        </div>
-        <div class="hero-actions">
-          <el-button :loading="store.isLoading" @click="store.loadBackupList()">
-            <el-icon><Refresh /></el-icon>刷新备份
-          </el-button>
-          <el-button type="primary" @click="router.push('/admin/categories')">
-            <el-icon><Setting /></el-icon>分类管理
-          </el-button>
         </div>
       </header>
 
@@ -44,11 +35,8 @@
                   <span class="ops-icon-box"><el-icon><Coin /></el-icon></span>
                   <span>数据库备份与恢复</span>
                 </div>
-                <el-tag type="info" effect="plain">OSS archive</el-tag>
               </div>
             </template>
-
-            <p class="card-desc">触发加密备份、查看历史批次，并从已上传的备份恢复数据库。</p>
 
             <div class="action-row">
               <el-button type="primary" size="large" :loading="store.isBackupRunning" :disabled="store.actionsDisabled" @click="store.startBackup()">

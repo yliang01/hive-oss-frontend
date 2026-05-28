@@ -8,13 +8,11 @@
           </el-button>
           <div class="ops-kicker">Resource Taxonomy</div>
           <h1 class="ops-title">分类与分组管理</h1>
-          <p class="ops-subtitle">维护对象存储分类、展示模式、存储层和分组结构。左侧选择分类后，右侧管理对应分组。</p>
         </div>
         <div class="hero-actions">
           <el-button :loading="catLoading" @click="loadCategories">
             <el-icon><Refresh /></el-icon>刷新
           </el-button>
-          <el-button type="primary" @click="openCategoryDialog()">新增分类</el-button>
         </div>
       </header>
 
@@ -23,33 +21,48 @@
           <el-card class="admin-card" shadow="never">
             <template #header>
               <div class="card-header-row">
-                <div class="ops-card-title">
-                  <span class="ops-icon-box"><el-icon><Grid /></el-icon></span>
-                  <span>分类列表</span>
+                <div class="card-title-stack">
+                  <div class="ops-card-title">
+                    <span class="ops-icon-box"><el-icon><Grid /></el-icon></span>
+                    <span>分类列表</span>
+                  </div>
+                  <div class="card-title-meta">共 {{ categories.length }} 项</div>
                 </div>
-                <el-tag type="info" effect="plain">{{ categories.length }} 项</el-tag>
+                <div class="category-header-actions">
+                  <el-button type="primary" size="small" @click="openCategoryDialog()">新增分类</el-button>
+                </div>
               </div>
             </template>
-            <el-table :data="categories" v-loading="catLoading" size="small" :row-class-name="categoryRowClass" @row-click="row => selectCategory(row.code)">
-              <el-table-column prop="code" label="编码" width="110" />
-              <el-table-column prop="name" label="名称" />
-              <el-table-column prop="storageClass" label="存储层" width="100" />
-              <el-table-column label="视图" width="90">
+            <el-table class="category-table" :data="categories" v-loading="catLoading" size="small" style="width: 100%" :row-class-name="categoryRowClass" @row-click="row => selectCategory(row.code)">
+              <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="storageClass" label="存储层" width="92" />
+              <el-table-column label="视图" width="76">
                 <template #default="{ row }">
                   <el-tag size="small" effect="plain">{{ variantLabel(row.uiVariant) }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="启用" width="60">
+              <el-table-column label="启用" width="68" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="160">
+              <el-table-column label="操作" width="104" fixed="right">
                 <template #default="{ row }">
-                  <el-button link size="small" @click="selectCategory(row.code)">分组</el-button>
-                  <el-button link size="small" @click="openCategoryDialog(row)">编辑</el-button>
-                  <el-button link size="small" :type="row.enabled ? 'warning' : 'success'" @click="toggleCategoryEnabled(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
-                  <el-button link size="small" type="danger" @click="deleteCategory(row.code)">删除</el-button>
+                  <div class="category-actions" @click.stop>
+                    <el-button link size="small" @click="openCategoryDialog(row)">编辑</el-button>
+                    <el-dropdown trigger="click" @command="cmd => handleCategoryCommand(cmd, row)">
+                      <el-button link size="small">更多</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item :command="row.enabled ? 'disable' : 'enable'">
+                            {{ row.enabled ? '停用' : '启用' }}
+                          </el-dropdown-item>
+                          <el-dropdown-item command="delete" divided class="danger-dropdown-item">删除</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -60,29 +73,37 @@
           <el-card class="admin-card" shadow="never">
             <template #header>
               <div class="card-header-row">
-                <div class="ops-card-title">
-                  <span class="ops-icon-box"><el-icon><Connection /></el-icon></span>
-                  <span>分组列表</span>
+                <div class="card-title-stack">
+                  <div class="ops-card-title">
+                    <span class="ops-icon-box"><el-icon><Connection /></el-icon></span>
+                    <span>分组列表</span>
+                  </div>
+                  <div v-if="selectedCategory" class="card-title-meta">
+                    <strong>{{ selectedCategory.name }}</strong>
+                    <span>{{ selectedCategory.code }}</span>
+                  </div>
+                  <div v-else class="card-title-meta">选择分类后管理分组</div>
                 </div>
-                <el-tag v-if="selectedCat" size="small" type="primary" effect="plain">{{ selectedCat }}</el-tag>
-                <span v-else class="text-muted small">请先选择分类</span>
-                <el-button type="primary" size="small" :disabled="!selectedCat" @click="openGroupDialog()">新增分组</el-button>
+                <div class="group-header-actions">
+                  <el-tag v-if="selectedCategory" size="small" :type="selectedCategory.enabled ? 'success' : 'info'" effect="plain">
+                    {{ selectedCategory.enabled ? '启用' : '停用' }}
+                  </el-tag>
+                  <span v-else class="text-muted small">请先选择分类</span>
+                  <el-button type="primary" size="small" :disabled="!selectedCat" @click="openGroupDialog()">新增分组</el-button>
+                </div>
               </div>
             </template>
-            <div v-if="selectedCategory" class="selected-summary">
-              <div>
-                <strong>{{ selectedCategory.name }}</strong>
-                <span>{{ selectedCategory.code }} · {{ selectedCategory.storageClass }} · {{ variantLabel(selectedCategory.uiVariant) }}</span>
-              </div>
-              <el-tag :type="selectedCategory.enabled ? 'success' : 'info'">{{ selectedCategory.enabled ? '启用' : '停用' }}</el-tag>
-            </div>
-            <el-table :data="groups" v-loading="groupLoading" size="small" stripe>
-              <el-table-column prop="groupCode" label="编码" width="110" />
-              <el-table-column prop="groupName" label="名称" />
-              <el-table-column label="操作" width="120">
+            <el-empty v-if="!selectedCat" description="请先从左侧选择分类" :image-size="72" />
+            <el-table v-else :data="groups" v-loading="groupLoading" size="small" stripe style="width: 100%" empty-text="暂无分组">
+              <el-table-column prop="groupCode" label="编码" min-width="130" show-overflow-tooltip />
+              <el-table-column prop="groupName" label="名称" min-width="150" show-overflow-tooltip />
+              <el-table-column prop="sortOrder" label="排序" width="72" align="center" />
+              <el-table-column label="操作" width="104" fixed="right">
                 <template #default="{ row }">
-                  <el-button link size="small" @click="openGroupDialog(row)">编辑</el-button>
-                  <el-button link size="small" type="danger" @click="deleteGroup(row.groupCode)">删除</el-button>
+                  <div class="group-actions">
+                    <el-button link size="small" @click="openGroupDialog(row)">编辑</el-button>
+                    <el-button link size="small" type="danger" @click="deleteGroup(row.groupCode)">删除</el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -229,6 +250,16 @@ function openCategoryDialog(cat?: Category) {
   catDialogVisible.value = true
 }
 
+function handleCategoryCommand(command: string | number | object, row: Category) {
+  if (command === 'delete') {
+    deleteCategory(row.code)
+    return
+  }
+  if (command === 'enable' || command === 'disable') {
+    toggleCategoryEnabled(row)
+  }
+}
+
 async function saveCategory() {
   if (!catForm.value.code || !catForm.value.name) { ElMessage.warning('编码和名称必填'); return }
   if (!editingCategory.value && !catForm.value.bucketName) { ElMessage.warning('Bucket 必填'); return }
@@ -306,13 +337,13 @@ async function saveGroup() {
 }
 
 async function deleteGroup(groupCode: string) {
-  await ElMessageBox.confirm('确认删除该分组？', '确认删除', { type: 'warning' })
+  await ElMessageBox.confirm('确认删除该分组？组内文件将变为未分组，文件不会被删除。', '确认删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
   try {
     await catApi.adminDeleteGroup(selectedCat.value, groupCode)
     ElMessage.success('删除分组成功')
     await loadGroups()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error ?? '删除分组失败（可能仍关联文件）')
+    ElMessage.error(e.response?.data?.error ?? '删除分组失败')
   }
 }
 
@@ -326,25 +357,21 @@ onMounted(loadCategories)
 .card-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
 }
-.selected-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
-  border: 1px solid #bfdbfe;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #eff6ff, #ffffff);
-}
-.selected-summary strong { display: block; margin-bottom: 4px; }
-.selected-summary span { color: var(--hive-muted); font-size: 0.82rem; }
+.category-actions { display: flex; align-items: center; gap: 8px; }
+.category-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.card-title-stack { display: grid; gap: 6px; min-width: 0; }
+.card-title-meta { display: flex; align-items: center; gap: 8px; min-height: 20px; min-width: 0; color: var(--hive-muted); font-size: 0.82rem; }
+.card-title-meta strong { color: var(--hive-text); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-title-meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.group-actions { display: flex; align-items: center; gap: 8px; }
+.danger-dropdown-item { color: var(--hive-danger); }
 :deep(.selected-category-row) { --el-table-tr-bg-color: #eff6ff; }
-:deep(.el-table__row) { cursor: pointer; }
+:deep(.category-table .el-table__row) { cursor: pointer; }
 .fw-600 { font-weight: 600; }
 .ml-2 { margin-left: 8px; }
 .text-muted { color: var(--hive-muted); }
