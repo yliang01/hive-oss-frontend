@@ -4,7 +4,7 @@ import type { FileItem, FilePage, SyncResult, DownloadTaskStatus, UnfreezeTaskSt
 export const listFiles = (category: string, params: {
   page: number
   pageSize: number
-  groupId?: string
+  groupCode?: string
   ungroupedOnly?: boolean
   keyword?: string
 }) => client.get<FilePage>(`/categories/${category}/files`, { params })
@@ -46,8 +46,8 @@ export const getUnfreezeStatus = (category: string, fileKey: string) =>
 export const releaseLocal = (category: string, fileKey: string) =>
   client.post(`/categories/${category}/files/release-local/${fileKey}`)
 
-export const assignFilesToGroup = (category: string, groupId: string, fileKeys: string[]) =>
-  client.post(`/categories/${category}/groups/${groupId}/files:assign`, { fileKeys, operator: 'ui' })
+export const assignFilesToGroup = (category: string, groupCode: string, fileKeys: string[]) =>
+  client.post(`/categories/${category}/groups/${groupCode}/files:assign`, { fileKeys, operator: 'ui' })
 
 export const uploadFile = (
   category: string,

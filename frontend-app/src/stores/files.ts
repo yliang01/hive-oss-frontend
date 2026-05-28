@@ -80,7 +80,7 @@ export const useFilesStore = defineStore('files', () => {
       const params: any = { page: page - 1, pageSize: PAGE_SIZE }
       if (keyword.value.trim()) params.keyword = keyword.value.trim()
       if (groupFilter.value === GROUP_FILTER_UNGROUPED) params.ungroupedOnly = true
-      else if (groupFilter.value !== GROUP_FILTER_ALL) params.groupId = groupFilter.value
+      else if (groupFilter.value !== GROUP_FILTER_ALL) params.groupCode = groupFilter.value
 
       const res = await filesApi.listFiles(category.value, params)
       const data: FilePage = res.data
@@ -256,10 +256,10 @@ export const useFilesStore = defineStore('files', () => {
     }
   }
 
-  async function assignToGroup(targetGroupId: string) {
+  async function assignToGroup(targetGroupCode: string) {
     if (!selectedKeys.value.size) { ElMessage.warning('请先勾选文件'); return }
     try {
-      await filesApi.assignFilesToGroup(category.value, targetGroupId, selectedList.value)
+      await filesApi.assignFilesToGroup(category.value, targetGroupCode, selectedList.value)
       ElMessage.success('批量分配成功')
       selectedKeys.value.clear()
       await loadFiles(currentPage.value)

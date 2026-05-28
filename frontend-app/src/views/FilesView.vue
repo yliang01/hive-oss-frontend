@@ -68,7 +68,7 @@
           >
             <el-option label="全部文件" value="all" />
             <el-option label="未分组" value="ungrouped" />
-            <el-option v-for="g in store.groups" :key="g.groupId" :label="g.groupName" :value="String(g.groupId)" />
+            <el-option v-for="g in store.groups" :key="g.groupCode" :label="g.groupName" :value="g.groupCode" />
           </el-select>
         </div>
 
@@ -271,13 +271,13 @@
 
     <!-- 分配分组 Dialog -->
     <el-dialog v-model="assignVisible" title="分配分组" width="360px">
-      <el-select v-model="assignGroupId" placeholder="选择目标分组" style="width:100%">
-        <el-option v-for="g in store.groups" :key="g.groupId" :label="g.groupName" :value="String(g.groupId)" />
+      <el-select v-model="assignGroupCode" placeholder="选择目标分组" style="width:100%">
+        <el-option v-for="g in store.groups" :key="g.groupCode" :label="g.groupName" :value="g.groupCode" />
       </el-select>
       <p class="mt-8 text-muted small">已选 {{ store.selectedKeys.size }} 个文件</p>
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!assignGroupId" @click="doAssign">确认分配</el-button>
+        <el-button type="primary" :disabled="!assignGroupCode" @click="doAssign">确认分配</el-button>
       </template>
     </el-dialog>
 
@@ -309,7 +309,7 @@ const searchInput = ref('')
 const groupFilter = ref<GroupFilter>('all')
 const uploadVisible = ref(false)
 const assignVisible = ref(false)
-const assignGroupId = ref('')
+const assignGroupCode = ref('')
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
@@ -466,13 +466,13 @@ function openPreview(file: FileItem) {
 
 function openAssign() {
   if (!store.selectedKeys.size) { ElMessage.warning('请先选择文件'); return }
-  assignGroupId.value = ''
+  assignGroupCode.value = ''
   assignVisible.value = true
 }
 
 async function doAssign() {
-  if (!assignGroupId.value) return
-  await store.assignToGroup(assignGroupId.value)
+  if (!assignGroupCode.value) return
+  await store.assignToGroup(assignGroupCode.value)
   assignVisible.value = false
 }
 

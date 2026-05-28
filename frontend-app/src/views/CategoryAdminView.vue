@@ -79,15 +79,10 @@
             <el-table :data="groups" v-loading="groupLoading" size="small" stripe>
               <el-table-column prop="groupCode" label="编码" width="110" />
               <el-table-column prop="groupName" label="名称" />
-              <el-table-column label="启用" width="60">
-                <template #default="{ row }">
-                  <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
-                </template>
-              </el-table-column>
               <el-table-column label="操作" width="120">
                 <template #default="{ row }">
                   <el-button link size="small" @click="openGroupDialog(row)">编辑</el-button>
-                  <el-button link size="small" type="danger" @click="deleteGroup(row.groupId)">删除</el-button>
+                  <el-button link size="small" type="danger" @click="deleteGroup(row.groupCode)">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -170,7 +165,7 @@ const selectedCat = ref('')
 const selectedCategory = computed(() => categories.value.find(c => c.code === selectedCat.value) || null)
 
 type CategoryForm = Pick<Category, 'code' | 'name' | 'bucketName' | 'storageClass' | 'uiVariant' | 'sortOrder' | 'enabled'>
-type GroupForm = Pick<Group, 'groupCode' | 'groupName' | 'sortOrder' | 'enabled'>
+type GroupForm = Pick<Group, 'groupCode' | 'groupName' | 'sortOrder'>
 
 // Category dialog
 const catDialogVisible = ref(false)
@@ -182,7 +177,7 @@ const catForm = ref<CategoryForm>({ code: '', name: '', bucketName: '', storageC
 const groupDialogVisible = ref(false)
 const groupSaving = ref(false)
 const editingGroup = ref<Group | null>(null)
-const groupForm = ref<GroupForm>({ groupCode: '', groupName: '', sortOrder: 100, enabled: true })
+const groupForm = ref<GroupForm>({ groupCode: '', groupName: '', sortOrder: 100 })
 
 async function loadCategories() {
   catLoading.value = true
@@ -282,9 +277,9 @@ async function deleteCategory(code: string) {
 function openGroupDialog(group?: Group) {
   editingGroup.value = group || null
   if (group) {
-    groupForm.value = { groupCode: group.groupCode, groupName: group.groupName, sortOrder: group.sortOrder, enabled: group.enabled }
+    groupForm.value = { groupCode: group.groupCode, groupName: group.groupName, sortOrder: group.sortOrder }
   } else {
-    groupForm.value = { groupCode: '', groupName: '', sortOrder: 100, enabled: true }
+    groupForm.value = { groupCode: '', groupName: '', sortOrder: 100 }
   }
   groupDialogVisible.value = true
 }
@@ -295,7 +290,7 @@ async function saveGroup() {
   groupSaving.value = true
   try {
     if (editingGroup.value) {
-      await catApi.adminUpdateGroup(selectedCat.value, editingGroup.value.groupId, groupForm.value)
+      await catApi.adminUpdateGroup(selectedCat.value, editingGroup.value.groupCode, groupForm.value)
       ElMessage.success('更新分组成功')
     } else {
       await catApi.adminCreateGroup(selectedCat.value, groupForm.value)
@@ -310,10 +305,10 @@ async function saveGroup() {
   }
 }
 
-async function deleteGroup(groupId: number) {
+async function deleteGroup(groupCode: string) {
   await ElMessageBox.confirm('确认删除该分组？', '确认删除', { type: 'warning' })
   try {
-    await catApi.adminDeleteGroup(selectedCat.value, groupId)
+    await catApi.adminDeleteGroup(selectedCat.value, groupCode)
     ElMessage.success('删除分组成功')
     await loadGroups()
   } catch (e: any) {

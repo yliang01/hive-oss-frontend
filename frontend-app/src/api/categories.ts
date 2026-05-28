@@ -20,13 +20,13 @@ export const adminDeleteCategory = (code: string) =>
   client.delete(`/categories/${code}`)
 
 export const adminGetGroups = (categoryCode: string) =>
-  client.get<Group[]>(`/categories/${categoryCode}/groups`, { params: { includeDisabled: true } })
+  client.get<Group[]>(`/categories/${categoryCode}/groups`)
 
 export const adminCreateGroup = (categoryCode: string, data: Partial<Group>) =>
   client.post<Group>(`/categories/${categoryCode}/groups`, data)
 
-export const adminUpdateGroup = (categoryCode: string, groupId: number, data: Partial<Group>) =>
-  client.put<Group>(`/categories/${categoryCode}/groups/${groupId}`, data)
+export const adminUpdateGroup = (categoryCode: string, groupCode: string, data: Partial<Group>) =>
+  client.put<Group>(`/categories/${categoryCode}/groups/${groupCode}`, data)
 
-export const adminDeleteGroup = (categoryCode: string, groupId: number) =>
-  client.delete(`/categories/${categoryCode}/groups/${groupId}`)
+export const adminDeleteGroup = (categoryCode: string, groupCode: string) =>
+  client.delete(`/categories/${categoryCode}/groups/${groupCode}`)

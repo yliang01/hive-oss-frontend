@@ -17,10 +17,8 @@ export interface Category {
 }
 
 export interface Group {
-  groupId: number
   groupCode: string
   groupName: string
-  enabled: boolean
   sortOrder: number
 }
 
@@ -33,7 +31,7 @@ export interface FileItem {
   unfreezeTime?: string
   unfreezeStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
   groupName?: string
-  groupId?: string
+  groupCode?: string
   previewable: boolean
   previewUrl?: string
   previewBlockedReason?: 'FROZEN' | 'TOO_LARGE' | 'UNSUPPORTED_TYPE' | 'OSS_ONLY'
