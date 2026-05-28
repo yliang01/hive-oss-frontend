@@ -494,7 +494,12 @@ async function deleteSelected() {
 }
 
 async function confirmDeleteAll() {
-  await ElMessageBox.confirm('确认删除所有“等待执行删除”的文件？此操作不可撤销。', '确认', { type: 'warning' })
+  const pendingCount = store.files.filter(file => file.status === 'TO_BE_DELETED').length
+  if (!pendingCount) {
+    ElMessage.warning('当前列表没有等待执行删除的文件')
+    return
+  }
+  await ElMessageBox.confirm(`确认删除当前列表中 ${pendingCount} 个“等待执行删除”的文件？此操作不可撤销。`, '确认', { type: 'warning' })
   await store.confirmDeleteAll()
 }
 

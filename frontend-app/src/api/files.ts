@@ -25,8 +25,8 @@ export const checkUpload = (category: string, fileName: string) =>
 export const markDelete = (category: string, fileKeys: string[]) =>
   client.post(`/categories/${category}/files:mark-delete`, { fileKeys })
 
-export const confirmDelete = (category: string) =>
-  client.post(`/categories/${category}/files/confirm-delete`)
+export const confirmDelete = (category: string, fileKeys: string[]) =>
+  client.post(`/categories/${category}/files/confirm-delete`, { fileKeys })
 
 export const syncRemote = (category: string) =>
   client.post<SyncResult>(`/categories/${category}/files/sync-remote`)

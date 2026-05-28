@@ -118,8 +118,15 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function confirmDeleteAll() {
+    const pendingKeys = files.value
+      .filter(file => file.status === 'TO_BE_DELETED')
+      .map(file => file.fileKey)
+    if (!pendingKeys.length) {
+      ElMessage.warning('当前列表没有等待执行删除的文件')
+      return
+    }
     try {
-      await filesApi.confirmDelete(category.value)
+      await filesApi.confirmDelete(category.value, pendingKeys)
       ElMessage.success('确认删除成功')
       await loadFiles(currentPage.value)
     } catch (e: any) {
