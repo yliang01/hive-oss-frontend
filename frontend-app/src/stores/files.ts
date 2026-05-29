@@ -269,7 +269,7 @@ export const useFilesStore = defineStore('files', () => {
       await filesApi.assignFilesToGroup(category.value, targetGroupCode, selectedList.value)
       ElMessage.success('批量分配成功')
       selectedKeys.value.clear()
-      await loadFiles(currentPage.value)
+      await loadFiles(1)
     } catch (e: any) {
       ElMessage.error(e.response?.data?.error ?? '批量分配失败')
     }

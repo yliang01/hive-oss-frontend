@@ -70,6 +70,10 @@
             <el-option label="未分组" value="ungrouped" />
             <el-option v-for="g in store.groups" :key="g.groupCode" :label="g.groupName" :value="g.groupCode" />
           </el-select>
+
+          <el-button class="new-group-button" @click="goCreateGroup">
+            <el-icon><Connection /></el-icon>新建分组
+          </el-button>
         </div>
 
         <div class="toolbar-actions">
@@ -153,6 +157,13 @@
             <template #default="{ row }">
               <el-tag size="small" :type="row.deletable ? 'warning' : 'info'" effect="plain">
                 {{ row.deletable ? '可标记删除' : '受保护' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="分组" width="120">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.groupCode ? 'primary' : 'info'" effect="plain">
+                {{ row.groupName || '未分组' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -277,7 +288,7 @@
       <p class="mt-8 text-muted small">已选 {{ store.selectedKeys.size }} 个文件</p>
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!assignGroupCode" @click="doAssign">确认分配</el-button>
+        <el-button type="primary" :disabled="!assignGroupCode" :loading="assignLoading" @click="doAssign">确认分配</el-button>
       </template>
     </el-dialog>
 
@@ -309,6 +320,7 @@ const searchInput = ref('')
 const groupFilter = ref<GroupFilter>('all')
 const uploadVisible = ref(false)
 const assignVisible = ref(false)
+const assignLoading = ref(false)
 const assignGroupCode = ref('')
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
@@ -454,6 +466,10 @@ function onGroupChange(val: GroupFilter) {
   store.setGroupFilter(val)
 }
 
+function goCreateGroup() {
+  router.push({ path: '/admin/categories', query: { category: store.category, action: 'new-group' } })
+}
+
 function onSelectionChange(rows: FileItem[]) {
   store.selectedKeys.clear()
   rows.forEach(r => store.selectedKeys.add(r.fileKey))
@@ -472,8 +488,13 @@ function openAssign() {
 
 async function doAssign() {
   if (!assignGroupCode.value) return
-  await store.assignToGroup(assignGroupCode.value)
-  assignVisible.value = false
+  assignLoading.value = true
+  try {
+    await store.assignToGroup(assignGroupCode.value)
+    assignVisible.value = false
+  } finally {
+    assignLoading.value = false
+  }
 }
 
 async function confirmDelete(fileKeys: string[]) {
@@ -614,6 +635,7 @@ onUnmounted(() => {
 }
 .search-input { width: min(340px, 100%); }
 .group-select { width: 180px; }
+.new-group-button { flex: 0 0 auto; }
 .toolbar-actions {
   display: flex;
   align-items: center;
@@ -736,6 +758,6 @@ onUnmounted(() => {
   .toolbar-filter, .toolbar-actions, .hero-actions, .hero-side, .sync-compact { width: 100%; }
   .hero-side { align-items: stretch; }
   .toolbar-filter { flex-direction: column; }
-  .search-input, .group-select { width: 100%; }
+  .search-input, .group-select, .new-group-button { width: 100%; }
 }
 </style>

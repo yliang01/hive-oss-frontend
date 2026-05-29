@@ -170,12 +170,13 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as catApi from '@/api/categories'
 import type { Category, Group } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 
 const categories = ref<Category[]>([])
 const catLoading = ref(false)
@@ -209,6 +210,21 @@ async function loadCategories() {
     ElMessage.error(e.response?.data?.error ?? '加载分类失败')
   } finally {
     catLoading.value = false
+  }
+}
+
+async function applyRouteIntent() {
+  const category = typeof route.query.category === 'string' ? route.query.category : ''
+  if (!category) return
+  const exists = categories.value.some(c => c.code === category)
+  if (!exists) {
+    ElMessage.warning('指定分类不存在')
+    return
+  }
+  selectedCat.value = category
+  await loadGroups()
+  if (route.query.action === 'new-group') {
+    openGroupDialog()
   }
 }
 
@@ -347,7 +363,10 @@ async function deleteGroup(groupCode: string) {
   }
 }
 
-onMounted(loadCategories)
+onMounted(async () => {
+  await loadCategories()
+  await applyRouteIntent()
+})
 </script>
 
 <style scoped>
