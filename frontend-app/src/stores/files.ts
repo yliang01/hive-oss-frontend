@@ -134,6 +134,18 @@ export const useFilesStore = defineStore('files', () => {
     }
   }
 
+  async function cleanupLocal(fileKeys: string[]) {
+    const keys = Array.from(new Set(fileKeys.filter(Boolean)))
+    if (!keys.length) return
+    try {
+      await filesApi.cleanupLocal(category.value, keys)
+      ElMessage.success('本地记录已清理')
+      await loadFiles(currentPage.value)
+    } catch (e: any) {
+      ElMessage.error(e.response?.data?.error ?? '清理本地记录失败')
+    }
+  }
+
   async function syncRemote() {
     try {
       const res = await filesApi.syncRemote(category.value)
@@ -316,7 +328,7 @@ export const useFilesStore = defineStore('files', () => {
     selectedKeys, downloadStates, unfreezeStates,
     totalPages, hasPendingDelete, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
     init, loadFiles, loadMeta, refreshFiles,
-    deleteFiles, confirmDeleteAll, syncRemote, refreshPage,
+    deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, refreshPage,
     downloadFile, unfreezeFile, releaseLocal, assignToGroup,
     toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
   }

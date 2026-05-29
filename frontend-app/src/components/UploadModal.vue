@@ -49,7 +49,7 @@ const visible = computed({
   set: v => emit('update:modelValue', v),
 })
 
-type ItemStatus = 'pending' | 'uploading' | 'done' | 'exists' | 'conflict' | 'failed'
+type ItemStatus = 'pending' | 'uploading' | 'done' | 'exists' | 'failed'
 interface UploadItem { name: string; size: number; file: File; status: ItemStatus; progress: number }
 
 const fileInput = ref<HTMLInputElement>()
@@ -103,11 +103,11 @@ function setStatus(idx: number, status: ItemStatus, progress = 0) {
 }
 
 function statusLabel(s: ItemStatus) {
-  return { pending: '待上传', uploading: '上传中', done: '完成', exists: '已存在', conflict: '冲突', failed: '失败' }[s]
+  return { pending: '待上传', uploading: '上传中', done: '完成', exists: '已存在', failed: '失败' }[s]
 }
 
 function statusType(s: ItemStatus): '' | 'success' | 'info' | 'warning' | 'danger' {
-  return { pending: 'info', uploading: '', done: 'success', exists: 'warning', conflict: 'warning', failed: 'danger' }[s] as any
+  return { pending: 'info', uploading: '', done: 'success', exists: 'warning', failed: 'danger' }[s] as any
 }
 
 async function startUpload() {
@@ -120,9 +120,8 @@ async function startUpload() {
     setStatus(i, 'uploading')
     try {
       const checkRes = await checkUpload(props.category, file.name)
-      if (checkRes.status === 409) { setStatus(i, 'conflict'); continue }
-      if (!checkRes.data || checkRes.status >= 400) { setStatus(i, 'failed'); continue }
-      if (checkRes.data.exists) { setStatus(i, 'exists'); anyUploaded = true; continue }
+      if (checkRes.status === 409) { setStatus(i, 'exists'); anyUploaded = true; continue }
+      if (checkRes.status >= 400) { setStatus(i, 'failed'); continue }
 
       await uploadFile(props.category, file, pct => setStatus(i, 'uploading', pct))
       setStatus(i, 'done', 100)

@@ -13,6 +13,7 @@ export interface Category {
   lastSyncOssToDbMatched?: number
   lastSyncOssToDbMismatched?: number
   lastSyncDbToOssMismatched?: number
+  lastSyncSkipped?: number
   lastSyncMessage?: string
 }
 
@@ -88,6 +89,7 @@ export interface SyncResult {
   ossToDbMatched: number
   ossToDbMismatched: number
   dbToOssMismatched: number
+  skipped: number
 }
 
 export type TaskState = 'idle' | 'running' | 'success' | 'failed' | 'restart-needed'

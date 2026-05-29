@@ -16,7 +16,7 @@ export const batchGetFiles = (category: string, fileKeys: string[]) => {
 }
 
 export const checkUpload = (category: string, fileName: string) =>
-  client.post<{ exists: boolean; fileKey?: string }>(
+  client.post<void>(
     `/categories/${category}/files/upload/check`,
     { fileName },
     { validateStatus: s => s < 500 }
@@ -27,6 +27,9 @@ export const markDelete = (category: string, fileKeys: string[]) =>
 
 export const confirmDelete = (category: string, fileKeys: string[]) =>
   client.post(`/categories/${category}/files/confirm-delete`, { fileKeys })
+
+export const cleanupLocal = (category: string, fileKeys: string[]) =>
+  client.post(`/categories/${category}/files:cleanup-local`, { fileKeys })
 
 export const syncRemote = (category: string) =>
   client.post<SyncResult>(`/categories/${category}/files/sync-remote`)

@@ -207,6 +207,14 @@
                     @click="openPreview(row)"
                   >预览</el-button>
 
+                  <el-button
+                    v-if="row.status === 'DB_ONLY'"
+                    link
+                    size="small"
+                    type="warning"
+                    @click="cleanupLocalRecord(row.fileKey)"
+                  >清理本地</el-button>
+
                 </div>
 
                 <!-- 本地路径操作 -->
@@ -327,7 +335,7 @@ const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
 
 const selectedDeletableKeys = computed(() => store.files
-  .filter(file => file.deletable && store.selectedKeys.has(file.fileKey))
+  .filter(file => file.deletable && file.status !== 'DB_ONLY' && store.selectedKeys.has(file.fileKey))
   .map(file => file.fileKey))
 
 const syncStatusClass = computed(() => {
@@ -351,7 +359,7 @@ const syncCompactMeta = computed(() => {
   const meta = store.categoryMeta
   if (!meta?.lastSyncTime) return '点击“扫描云端”同步云端文件状态'
   if (meta.lastSyncStatus === 'FAILED') return `${formatDate(meta.lastSyncTime)} · 查看详情`
-  return `云端 ${meta.lastSyncOssTotal ?? 0} · 仅云端 ${meta.lastSyncOssOnly ?? 0} · 异常 ${meta.lastSyncOssToDbMismatched ?? 0}`
+  return `云端 ${meta.lastSyncOssTotal ?? 0} · 仅云端 ${meta.lastSyncOssOnly ?? 0} · 异常 ${meta.lastSyncOssToDbMismatched ?? 0} · 跳过 ${meta.lastSyncSkipped ?? 0}`
 })
 
 const syncDetailRows = computed(() => {
@@ -382,6 +390,7 @@ const syncDetailRows = computed(() => {
     { label: '仅云端', value: String(meta.lastSyncOssOnly ?? 0) },
     { label: '状态异常', value: String(meta.lastSyncOssToDbMismatched ?? 0) },
     { label: '仅本地记录', value: String(meta.lastSyncDbToOssMismatched ?? 0) },
+    { label: '跳过', value: String(meta.lastSyncSkipped ?? 0) },
   )
   return rows
 })
@@ -527,6 +536,11 @@ async function confirmDeleteAll() {
 async function confirmRelease(fileKey: string) {
   await ElMessageBox.confirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。', '确认', { type: 'warning' })
   await store.releaseLocal(fileKey)
+}
+
+async function cleanupLocalRecord(fileKey: string) {
+  await ElMessageBox.confirm('仅清理本地记录，不会删除 OSS 对象。请确认 OSS 中确实不存在该文件。', '清理本地记录', { type: 'warning' })
+  await store.cleanupLocal([fileKey])
 }
 
 async function doSync() {
