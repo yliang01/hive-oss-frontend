@@ -28,9 +28,19 @@
             <span class="sync-dot" />
             <div class="sync-copy">
               <div class="sync-compact-title">{{ syncCompactTitle }}</div>
+              <div v-if="syncChartSegments.length" class="sync-bars" aria-label="云端扫描结果分布">
+                <span
+                  v-for="segment in syncChartSegments"
+                  :key="segment.key"
+                  class="sync-bar-segment"
+                  :class="`sync-bar-segment--${segment.key}`"
+                  :style="{ width: `${segment.percent}%` }"
+                  :title="`${segment.label} ${segment.value} (${segment.percent}%)`"
+                />
+              </div>
               <div class="sync-compact-meta">{{ syncCompactMeta }}</div>
             </div>
-            <el-popover placement="bottom-end" trigger="click" width="280">
+            <el-popover placement="bottom-end" trigger="click" width="320">
               <template #reference>
                 <el-button link size="small">详情</el-button>
               </template>
@@ -39,6 +49,21 @@
                   <span>{{ row.label }}</span>
                   <strong>{{ row.value }}</strong>
                 </div>
+                <template v-if="syncChartRows.length">
+                  <div class="sync-detail-bars" aria-label="云端扫描结果分布详情">
+                    <span
+                      v-for="segment in syncChartSegments"
+                      :key="segment.key"
+                      class="sync-bar-segment"
+                      :class="`sync-bar-segment--${segment.key}`"
+                      :style="{ width: `${segment.percent}%` }"
+                    />
+                  </div>
+                  <div v-for="row in syncChartRows" :key="row.key" class="sync-detail-row sync-detail-row--metric">
+                    <span><i class="sync-metric-dot" :class="`sync-metric-dot--${row.key}`" />{{ row.label }}</span>
+                    <strong>{{ row.value }} <small>{{ row.percent }}%</small></strong>
+                  </div>
+                </template>
               </div>
             </el-popover>
           </div>
@@ -359,8 +384,29 @@ const syncCompactMeta = computed(() => {
   const meta = store.categoryMeta
   if (!meta?.lastSyncTime) return '点击“扫描云端”同步云端文件状态'
   if (meta.lastSyncStatus === 'FAILED') return `${formatDate(meta.lastSyncTime)} · 查看详情`
-  return `云端 ${meta.lastSyncOssTotal ?? 0} · 仅云端 ${meta.lastSyncOssOnly ?? 0} · 异常 ${meta.lastSyncOssToDbMismatched ?? 0} · 跳过 ${meta.lastSyncSkipped ?? 0}`
+  const diff = (meta.lastSyncOssOnly ?? 0) + (meta.lastSyncDbToOssMismatched ?? 0)
+  return `匹配 ${meta.lastSyncOssToDbMatched ?? 0} · 差异 ${diff} · 异常 ${meta.lastSyncOssToDbMismatched ?? 0} · 已跳过 ${meta.lastSyncSkipped ?? 0}`
 })
+
+const syncChartRows = computed(() => {
+  const meta = store.categoryMeta
+  if (syncLoading.value || !meta?.lastSyncTime || meta.lastSyncStatus === 'FAILED') return []
+  const rows = [
+    { key: 'matched', label: '已匹配', value: meta.lastSyncOssToDbMatched ?? 0 },
+    { key: 'oss-only', label: '仅云端', value: meta.lastSyncOssOnly ?? 0 },
+    { key: 'db-only', label: '仅本地', value: meta.lastSyncDbToOssMismatched ?? 0 },
+    { key: 'abnormal', label: '状态异常', value: meta.lastSyncOssToDbMismatched ?? 0 },
+    { key: 'skipped', label: '已跳过', value: meta.lastSyncSkipped ?? 0 },
+  ]
+  const total = rows.reduce((sum, row) => sum + row.value, 0)
+  if (!total) return []
+  return rows.map(row => ({
+    ...row,
+    percent: Math.round((row.value / total) * 100),
+  }))
+})
+
+const syncChartSegments = computed(() => syncChartRows.value.filter(row => row.value > 0))
 
 const syncDetailRows = computed(() => {
   const meta = store.categoryMeta
@@ -385,13 +431,11 @@ const syncDetailRows = computed(() => {
     return rows
   }
   rows.push(
-    { label: '云端文件', value: String(meta.lastSyncOssTotal ?? 0) },
-    { label: '已匹配', value: String(meta.lastSyncOssToDbMatched ?? 0) },
-    { label: '仅云端', value: String(meta.lastSyncOssOnly ?? 0) },
-    { label: '状态异常', value: String(meta.lastSyncOssToDbMismatched ?? 0) },
-    { label: '仅本地记录', value: String(meta.lastSyncDbToOssMismatched ?? 0) },
-    { label: '跳过', value: String(meta.lastSyncSkipped ?? 0) },
+    { label: '云端对象', value: String(meta.lastSyncOssTotal ?? 0) },
   )
+  if (syncChartRows.value.length) {
+    rows.push({ label: '结果分布', value: '云端对象 + 本地差异' })
+  }
   return rows
 })
 
@@ -413,7 +457,7 @@ function previewBlockedMsg(reason: string | undefined) {
     FROZEN: '文件未解冻，暂不可预览',
     TOO_LARGE: '文件过大，暂不支持预览',
     UNSUPPORTED_TYPE: '当前文件类型不支持预览',
-    OSS_ONLY: '仅远端存在，无解密信息不可预览',
+    OSS_ONLY: '仅云端存在，无解密信息不可预览',
   }
   return reason ? map[reason] || '文件不可预览' : '文件不可预览'
 }
@@ -426,9 +470,9 @@ function variantLabel(variant: string | undefined) {
 
 function statusLabel(status: string | undefined) {
   const map: Record<string, string> = {
-    UPLOADED: '云端已匹配',
-    OSS_ONLY: '仅远端',
-    DB_ONLY: '仅本地记录',
+    UPLOADED: '已匹配',
+    OSS_ONLY: '仅云端',
+    DB_ONLY: '仅本地',
     TO_BE_DELETED: '等待执行删除',
     UPLOADING: '上传中',
   }
@@ -437,8 +481,9 @@ function statusLabel(status: string | undefined) {
 
 function statusTagType(status: string | undefined) {
   if (status === 'UPLOADED') return 'success'
-  if (status === 'OSS_ONLY') return 'warning'
-  if (status === 'TO_BE_DELETED' || status === 'DB_ONLY') return 'danger'
+  if (status === 'OSS_ONLY') return 'primary'
+  if (status === 'DB_ONLY') return 'warning'
+  if (status === 'TO_BE_DELETED') return 'danger'
   if (status === 'UPLOADING') return 'primary'
   return 'info'
 }
@@ -539,7 +584,7 @@ async function confirmRelease(fileKey: string) {
 }
 
 async function cleanupLocalRecord(fileKey: string) {
-  await ElMessageBox.confirm('仅清理本地记录，不会删除 OSS 对象。请确认 OSS 中确实不存在该文件。', '清理本地记录', { type: 'warning' })
+  await ElMessageBox.confirm('仅清理本地记录，不会删除云端对象。请确认云端中确实不存在该文件。', '清理本地记录', { type: 'warning' })
   await store.cleanupLocal([fileKey])
 }
 
@@ -616,6 +661,23 @@ onUnmounted(() => {
 .sync-copy { min-width: 0; flex: 1 1 auto; }
 .sync-compact-title { font-size: 0.86rem; font-weight: 800; color: var(--hive-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sync-compact-meta { margin-top: 2px; font-size: 0.78rem; color: var(--hive-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-bars,
+.sync-detail-bars {
+  display: flex;
+  width: 100%;
+  height: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hive-border-soft);
+}
+.sync-detail-bars { margin: 4px 0 2px; height: 8px; }
+.sync-bar-segment { min-width: 3px; height: 100%; }
+.sync-bar-segment--matched { background: var(--hive-success); }
+.sync-bar-segment--oss-only { background: var(--hive-primary); }
+.sync-bar-segment--db-only { background: var(--hive-warning); }
+.sync-bar-segment--abnormal { background: var(--hive-danger); }
+.sync-bar-segment--skipped { background: var(--hive-subtle); }
 .sync-compact--success .sync-dot { background: var(--hive-success); box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14); }
 .sync-compact--failed .sync-dot { background: var(--hive-danger); box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14); }
 .sync-compact--running .sync-dot { background: var(--hive-primary); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16); animation: pulse-dot 1.2s infinite ease-in-out; }
@@ -623,7 +685,15 @@ onUnmounted(() => {
 .sync-detail-list { display: grid; gap: 9px; }
 .sync-detail-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; font-size: 0.86rem; }
 .sync-detail-row span { color: var(--hive-muted); }
+.sync-detail-row--metric span { display: inline-flex; align-items: center; gap: 7px; }
 .sync-detail-row strong { color: var(--hive-text); text-align: right; word-break: break-word; }
+.sync-detail-row strong small { margin-left: 6px; color: var(--hive-muted); font-size: 0.76rem; font-weight: 700; }
+.sync-metric-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--hive-subtle); }
+.sync-metric-dot--matched { background: var(--hive-success); }
+.sync-metric-dot--oss-only { background: var(--hive-primary); }
+.sync-metric-dot--db-only { background: var(--hive-warning); }
+.sync-metric-dot--abnormal { background: var(--hive-danger); }
+.sync-metric-dot--skipped { background: var(--hive-subtle); }
 @keyframes pulse-dot {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(0.72); opacity: 0.72; }

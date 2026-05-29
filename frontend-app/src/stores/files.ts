@@ -150,10 +150,10 @@ export const useFilesStore = defineStore('files', () => {
     try {
       const res = await filesApi.syncRemote(category.value)
       const d = res.data
-      ElMessage.success(`远程同步完成！OSS总数: ${d.ossTotal}, OSS独有: ${d.ossOnly}`)
+      ElMessage.success(`云端扫描完成！云端对象: ${d.ossTotal}, 仅云端: ${d.ossOnly}`)
       await Promise.all([loadMeta(), loadFiles(currentPage.value)])
     } catch (e: any) {
-      ElMessage.error(e.response?.data?.error ?? '远程同步失败')
+      ElMessage.error(e.response?.data?.error ?? '云端扫描失败')
       await loadMeta()
     }
   }
