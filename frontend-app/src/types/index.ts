@@ -15,6 +15,15 @@ export interface Category {
   lastSyncDbToOssMismatched?: number
   lastSyncSkipped?: number
   lastSyncMessage?: string
+  lastLocalCheckTime?: string
+  lastLocalCheckStatus?: 'SUCCESS' | 'FAILED'
+  lastLocalCheckRecordTotal?: number
+  lastLocalCheckSizeMatched?: number
+  lastLocalCheckSizeChanged?: number
+  lastLocalCheckMissing?: number
+  lastLocalCheckUnverifiable?: number
+  lastLocalCheckBaselineMissing?: number
+  lastLocalCheckMessage?: string
 }
 
 export interface Group {
@@ -27,6 +36,7 @@ export interface FileItem {
   fileKey: string
   fileName: string
   size: number
+  originalSize?: number
   status: string
   updateTime: string
   unfreezeTime?: string
@@ -45,6 +55,9 @@ export interface FileItem {
   deletable: boolean
   localPath?: string
   localPathExists?: boolean
+  localCheckStatus?: 'SIZE_MATCHED' | 'SIZE_CHANGED' | 'MISSING' | 'BASELINE_MISSING' | 'UNVERIFIABLE'
+  localCheckTime?: string
+  localCheckObservedSize?: number
   mimeType?: string
 }
 
@@ -92,6 +105,30 @@ export interface SyncResult {
   skipped: number
 }
 
+export interface LocalScanResult {
+  status?: 'SUCCESS' | 'FAILED'
+  checkedAt?: string
+  message?: string
+  recordTotal: number
+  sizeMatched: number
+  sizeChanged: number
+  missing: number
+  baselineMissing: number
+  unverifiable: number
+}
+
+export interface LocalReuploadStart {
+  taskId: string
+  status: 'RUNNING'
+}
+
+export interface LocalReuploadTaskStatus {
+  taskId: string
+  fileKey: string
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'UNKNOWN'
+  message?: string
+}
+
 export type TaskState = 'idle' | 'running' | 'success' | 'failed' | 'restart-needed'
 
 export interface TaskStatus {
@@ -111,6 +148,12 @@ export type DownloadState = {
 
 export type UnfreezeState = {
   status: 'idle' | 'requesting' | 'polling' | 'done' | 'failed'
+}
+
+export type ReuploadState = {
+  status: 'idle' | 'requesting' | 'running' | 'done' | 'failed' | 'unknown'
+  taskId?: string
+  message?: string
 }
 
 export type GroupFilter = 'all' | 'ungrouped' | string

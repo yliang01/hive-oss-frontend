@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as filesApi from '@/api/files'
 import * as categoriesApi from '@/api/categories'
-import type { FileItem, FilePage, Category, Group, DownloadState, UnfreezeState, GroupFilter } from '@/types'
+import type { FileItem, FilePage, Category, Group, DownloadState, UnfreezeState, ReuploadState, GroupFilter } from '@/types'
 
 const PAGE_SIZE = 50
 const GROUP_FILTER_ALL = 'all'
@@ -29,6 +29,7 @@ export const useFilesStore = defineStore('files', () => {
   const selectedKeys = ref<Set<string>>(new Set())
   const downloadStates = ref<Map<string, DownloadState>>(new Map())
   const unfreezeStates = ref<Map<string, UnfreezeState>>(new Map())
+  const reuploadStates = ref<Map<string, ReuploadState>>(new Map())
   const taskRunId = ref(0)
 
   const totalPages = computed(() => Math.ceil(total.value / PAGE_SIZE))
@@ -57,6 +58,7 @@ export const useFilesStore = defineStore('files', () => {
     taskRunId.value++
     downloadStates.value.clear()
     unfreezeStates.value.clear()
+    reuploadStates.value.clear()
   }
 
   async function loadMeta() {
@@ -156,6 +158,73 @@ export const useFilesStore = defineStore('files', () => {
       ElMessage.error(e.response?.data?.error ?? '云端扫描失败')
       await loadMeta()
     }
+  }
+
+  async function scanLocal() {
+    try {
+      const res = await filesApi.scanLocal(category.value)
+      const d = res.data
+      ElMessage.success(`本地检查完成！已改动: ${d.sizeChanged}, 本地副本未发现: ${d.missing}`)
+      await Promise.all([loadMeta(), loadFiles(currentPage.value)])
+    } catch (e: any) {
+      ElMessage.error(e.response?.data?.error ?? '本地检查失败')
+      await loadMeta()
+    }
+  }
+
+  async function reuploadLocal(file: FileItem) {
+    if (!file.localCheckTime || file.localCheckObservedSize == null) {
+      ElMessage.error('本地检查结果不完整，请重新检查')
+      return
+    }
+    const runId = taskRunId.value
+    const taskCategory = category.value
+    reuploadStates.value.set(file.fileKey, { status: 'requesting' })
+    try {
+      const res = await filesApi.startLocalReupload(taskCategory, {
+        fileKey: file.fileKey,
+        localCheckTime: file.localCheckTime,
+        observedSize: file.localCheckObservedSize,
+      })
+      if (runId !== taskRunId.value) return
+      reuploadStates.value.set(file.fileKey, { status: 'running', taskId: res.data.taskId })
+      void pollLocalReupload(taskCategory, file.fileKey, res.data.taskId, runId)
+    } catch (e: any) {
+      if (runId !== taskRunId.value) return
+      reuploadStates.value.set(file.fileKey, { status: 'failed', message: e.response?.data?.error ?? '重新上传启动失败' })
+      ElMessage.error(e.response?.data?.error ?? '重新上传启动失败')
+      setTimeout(() => reuploadStates.value.delete(file.fileKey), 4000)
+    }
+  }
+
+  async function pollLocalReupload(taskCategory: string, fileKey: string, taskId: string, runId: number) {
+    for (let i = 0; i < 120; i++) {
+      await sleep(3000)
+      if (runId !== taskRunId.value) return
+      try {
+        const res = await filesApi.getLocalReuploadStatus(taskCategory, taskId)
+        if (runId !== taskRunId.value) return
+        const task = res.data
+        if (task.status === 'RUNNING') continue
+        if (task.status === 'SUCCESS') {
+          reuploadStates.value.set(fileKey, { status: 'done', taskId, message: task.message })
+          ElMessage.success(task.message || '本地版本已覆盖上传')
+          await Promise.all([refreshFiles([fileKey]), loadMeta()])
+        } else if (task.status === 'UNKNOWN') {
+          reuploadStates.value.set(fileKey, { status: 'unknown', taskId, message: task.message })
+          ElMessage.error(task.message || '上传结果未知，请扫描云端确认')
+        } else {
+          reuploadStates.value.set(fileKey, { status: 'failed', taskId, message: task.message })
+          ElMessage.error(task.message || '重新上传失败')
+        }
+        setTimeout(() => {
+          if (runId === taskRunId.value) reuploadStates.value.delete(fileKey)
+        }, 5000)
+        return
+      } catch {}
+    }
+    reuploadStates.value.set(fileKey, { status: 'failed', taskId, message: '重新上传状态查询超时' })
+    ElMessage.error('重新上传状态查询超时，请扫描云端确认')
   }
 
   async function refreshPage() {
@@ -325,11 +394,11 @@ export const useFilesStore = defineStore('files', () => {
   return {
     category, categoryMeta, groups,
     files, total, currentPage, keyword, groupFilter, isLoading, viewMode,
-    selectedKeys, downloadStates, unfreezeStates,
+    selectedKeys, downloadStates, unfreezeStates, reuploadStates,
     totalPages, hasPendingDelete, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
     init, loadFiles, loadMeta, refreshFiles,
-    deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, refreshPage,
-    downloadFile, unfreezeFile, releaseLocal, assignToGroup,
+    deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, scanLocal, refreshPage,
+    downloadFile, unfreezeFile, reuploadLocal, releaseLocal, assignToGroup,
     toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
   }
 })

@@ -9,7 +9,6 @@
           <div class="ops-kicker">Object Browser</div>
           <h1 class="ops-title">{{ store.categoryMeta?.name || store.category }}</h1>
           <p class="ops-subtitle">
-            <el-tag size="small" effect="plain">{{ store.category }}</el-tag>
             <el-tag size="small" type="info" effect="plain">{{ variantLabel(store.categoryMeta?.uiVariant) }}</el-tag>
             <span>共 {{ store.total }} 个对象，当前第 {{ store.currentPage }} 页</span>
           </p>
@@ -21,6 +20,9 @@
             </el-button>
             <el-button size="large" :loading="syncLoading" @click="doSync">
               <el-icon><Refresh /></el-icon>扫描云端
+            </el-button>
+            <el-button size="large" :loading="localScanLoading" @click="doLocalScan">
+              <el-icon><Refresh /></el-icon>检查本地
             </el-button>
           </div>
 
@@ -64,6 +66,25 @@
                     <strong>{{ row.value }} <small>{{ row.percent }}%</small></strong>
                   </div>
                 </template>
+              </div>
+            </el-popover>
+          </div>
+
+          <div class="sync-compact" :class="localScanStatusClass">
+            <span class="sync-dot" />
+            <div class="sync-copy">
+              <div class="sync-compact-title">{{ localScanCompactTitle }}</div>
+              <div class="sync-compact-meta">{{ localScanCompactMeta }}</div>
+            </div>
+            <el-popover placement="bottom-end" trigger="click" width="320">
+              <template #reference>
+                <el-button link size="small">详情</el-button>
+              </template>
+              <div class="sync-detail-list">
+                <div v-for="row in localScanDetailRows" :key="row.label" class="sync-detail-row">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
               </div>
             </el-popover>
           </div>
@@ -149,11 +170,6 @@
                   <div class="expand-value mono">{{ row.fileName }}</div>
                   <el-button size="small" @click="copy(row.fileName)">复制文件名</el-button>
                 </div>
-                <div class="expand-item">
-                  <label>Key</label>
-                  <div class="expand-value mono">{{ row.fileKey }}</div>
-                  <el-button size="small" @click="copy(row.fileKey)">复制 Key</el-button>
-                </div>
               </div>
             </template>
           </el-table-column>
@@ -166,16 +182,17 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Key" width="160" class-name="mono-col">
-            <template #default="{ row }">
-              <span :title="row.fileKey" class="truncated-name mono">{{ truncate(row.fileKey, 22) }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="大小" width="90" :formatter="(r) => formatSize(r.size)" />
+          <el-table-column label="云端存储大小" width="120" :formatter="(r) => formatSize(r.size)" />
           <el-table-column label="同步状态" width="140">
             <template #default="{ row }">
               <el-tag size="small" :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="本地校验" width="140">
+            <template #default="{ row }">
+              <el-tooltip :content="localCheckTip(row)" placement="top">
+                <el-tag size="small" :type="localCheckTagType(row)" effect="plain">{{ localCheckLabel(row) }}</el-tag>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column label="删除策略" width="110">
@@ -231,6 +248,15 @@
                     :title="!row.previewable ? previewBlockedMsg(row.previewBlockedReason) : ''"
                     @click="openPreview(row)"
                   >预览</el-button>
+
+                  <el-button
+                    v-if="canReupload(row)"
+                    link
+                    size="small"
+                    type="danger"
+                    :loading="['requesting', 'running'].includes(reuploadState(row.fileKey).status)"
+                    @click="openReupload(row)"
+                  >{{ reuploadLabel(row.fileKey) }}</el-button>
 
                   <el-button
                     v-if="row.status === 'DB_ONLY'"
@@ -293,6 +319,15 @@
             <div class="grid-name" :title="file.fileName">
               <span>{{ truncate(file.fileName, 30) }}</span>
               <small>{{ formatSize(file.size) }}</small>
+              <small class="grid-local-check" :class="`grid-local-check--${file.localCheckStatus || 'not-checked'}`">{{ localCheckLabel(file) }}</small>
+              <el-button
+                v-if="canReupload(file)"
+                link
+                size="small"
+                type="danger"
+                :loading="['requesting', 'running'].includes(reuploadState(file.fileKey).status)"
+                @click.stop="openReupload(file)"
+              >{{ reuploadLabel(file.fileKey) }}</el-button>
             </div>
           </div>
         </div>
@@ -322,6 +357,30 @@
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
         <el-button type="primary" :disabled="!assignGroupCode" :loading="assignLoading" @click="doAssign">确认分配</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="reuploadVisible" title="确认重新上传" width="440px">
+      <template v-if="reuploadFile">
+        <div class="reupload-detail-list">
+          <div><span>文件</span><strong>{{ reuploadFile.fileName }}</strong></div>
+          <div><span>分组</span><strong>{{ reuploadFile.groupName || '未分组' }}</strong></div>
+          <div><span>原始大小基线</span><strong>{{ reuploadFile.originalSize == null ? '未建立（将以当前文件建立）' : formatSize(reuploadFile.originalSize) }}</strong></div>
+          <div><span>当前本地大小</span><strong>{{ formatSize(reuploadFile.localCheckObservedSize) }}</strong></div>
+          <div><span>云端存储大小</span><strong>{{ formatSize(reuploadFile.size) }}</strong></div>
+        </div>
+        <el-alert
+          :title="reuploadFile.localCheckStatus === 'BASELINE_MISSING'
+            ? '无法确认本地文件是否与历史版本一致。确认后会覆盖同一云端对象，并以当前本地大小建立新的校验基线；系统内无法回滚。'
+            : '确认后会以扫描目录中的本地文件覆盖同一云端对象，系统内无法回滚。'"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+      </template>
+      <template #footer>
+        <el-button :disabled="reuploadLoading" @click="reuploadVisible = false">取消</el-button>
+        <el-button type="danger" :loading="reuploadLoading" @click="doReupload">确认覆盖上传</el-button>
       </template>
     </el-dialog>
 
@@ -358,6 +417,10 @@ const assignGroupCode = ref('')
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
+const localScanLoading = ref(false)
+const reuploadVisible = ref(false)
+const reuploadLoading = ref(false)
+const reuploadFile = ref<FileItem | null>(null)
 
 const selectedDeletableKeys = computed(() => store.files
   .filter(file => file.deletable && file.status !== 'DB_ONLY' && store.selectedKeys.has(file.fileKey))
@@ -394,7 +457,7 @@ const syncChartRows = computed(() => {
   const rows = [
     { key: 'matched', label: '已匹配', value: meta.lastSyncOssToDbMatched ?? 0 },
     { key: 'oss-only', label: '仅云端', value: meta.lastSyncOssOnly ?? 0 },
-    { key: 'db-only', label: '仅本地', value: meta.lastSyncDbToOssMismatched ?? 0 },
+    { key: 'db-only', label: '仅数据库', value: meta.lastSyncDbToOssMismatched ?? 0 },
     { key: 'abnormal', label: '状态异常', value: meta.lastSyncOssToDbMismatched ?? 0 },
     { key: 'skipped', label: '已跳过', value: meta.lastSyncSkipped ?? 0 },
   ]
@@ -439,6 +502,63 @@ const syncDetailRows = computed(() => {
   return rows
 })
 
+const localScanStatusClass = computed(() => {
+  if (localScanLoading.value) return 'sync-compact--running'
+  const meta = store.categoryMeta
+  if (!meta?.lastLocalCheckTime) return 'sync-compact--empty'
+  if (meta.lastLocalCheckStatus === 'FAILED') return 'sync-compact--failed'
+  return 'sync-compact--success'
+})
+
+const localScanCompactTitle = computed(() => {
+  if (localScanLoading.value) return '本地检查：检查中'
+  const meta = store.categoryMeta
+  if (!meta?.lastLocalCheckTime) return '本地检查：尚未检查'
+  if (meta.lastLocalCheckStatus === 'FAILED') return '本地检查失败'
+  return `本地检查：${formatDate(meta.lastLocalCheckTime)}`
+})
+
+const localScanCompactMeta = computed(() => {
+  if (localScanLoading.value) return '仅检查已上传记录的预期本地路径'
+  const meta = store.categoryMeta
+  if (!meta?.lastLocalCheckTime) return '点击“检查本地”核对已上传记录的本地副本'
+  if (meta.lastLocalCheckStatus === 'FAILED') return `${formatDate(meta.lastLocalCheckTime)} · 查看详情`
+  return `大小一致 ${meta.lastLocalCheckSizeMatched ?? 0} · 已改动 ${meta.lastLocalCheckSizeChanged ?? 0} · 未发现 ${meta.lastLocalCheckMissing ?? 0} · 基线缺失 ${meta.lastLocalCheckBaselineMissing ?? 0}`
+})
+
+const localScanDetailRows = computed(() => {
+  const meta = store.categoryMeta
+  if (localScanLoading.value) {
+    return [
+      { label: '状态', value: '检查中' },
+      { label: '说明', value: '仅检查已上传记录的预期本地路径' },
+    ]
+  }
+  if (!meta?.lastLocalCheckTime) {
+    return [
+      { label: '状态', value: '尚未检查' },
+      { label: '说明', value: '仅按数据库已登记的分组和文件名检查本地副本' },
+    ]
+  }
+  const rows = [
+    { label: '状态', value: meta.lastLocalCheckStatus === 'FAILED' ? '失败' : '成功' },
+    { label: '时间', value: formatDate(meta.lastLocalCheckTime) },
+  ]
+  if (meta.lastLocalCheckStatus === 'FAILED') {
+    rows.push({ label: '错误', value: meta.lastLocalCheckMessage || '请检查后端日志' })
+    return rows
+  }
+  rows.push(
+    { label: '已上传记录', value: String(meta.lastLocalCheckRecordTotal ?? 0) },
+    { label: '大小一致', value: String(meta.lastLocalCheckSizeMatched ?? 0) },
+    { label: '本地已改动', value: String(meta.lastLocalCheckSizeChanged ?? 0) },
+    { label: '本地副本未发现', value: String(meta.lastLocalCheckMissing ?? 0) },
+    { label: '未建立大小基线', value: String(meta.lastLocalCheckBaselineMissing ?? 0) },
+    { label: '无法核对', value: String(meta.lastLocalCheckUnverifiable ?? 0) },
+  )
+  return rows
+})
+
 function buildUrl(raw: string | undefined) {
   if (!raw) return ''
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
@@ -472,7 +592,7 @@ function statusLabel(status: string | undefined) {
   const map: Record<string, string> = {
     UPLOADED: '已匹配',
     OSS_ONLY: '仅云端',
-    DB_ONLY: '仅本地',
+    DB_ONLY: '仅数据库',
     TO_BE_DELETED: '等待执行删除',
     UPLOADING: '上传中',
   }
@@ -486,6 +606,38 @@ function statusTagType(status: string | undefined) {
   if (status === 'TO_BE_DELETED') return 'danger'
   if (status === 'UPLOADING') return 'primary'
   return 'info'
+}
+
+function localCheckLabel(file: FileItem) {
+  if (file.status !== 'UPLOADED') return '不适用'
+  const map: Record<string, string> = {
+    SIZE_MATCHED: '大小一致',
+    SIZE_CHANGED: '本地已改动',
+    MISSING: '本地副本未发现',
+    BASELINE_MISSING: '未建立大小基线',
+    UNVERIFIABLE: '无法核对',
+  }
+  return file.localCheckStatus ? map[file.localCheckStatus] || file.localCheckStatus : '未检查'
+}
+
+function localCheckTagType(file: FileItem) {
+  if (file.status !== 'UPLOADED') return 'info'
+  if (file.localCheckStatus === 'SIZE_MATCHED') return 'success'
+  if (file.localCheckStatus === 'SIZE_CHANGED') return 'danger'
+  if (file.localCheckStatus === 'BASELINE_MISSING' || file.localCheckStatus === 'UNVERIFIABLE') return 'warning'
+  return 'info'
+}
+
+function localCheckTip(file: FileItem) {
+  if (file.status !== 'UPLOADED') return '仅已上传记录参与本地检查'
+  if (file.localCheckStatus === 'SIZE_CHANGED') {
+    return `当前本地 ${formatSize(file.localCheckObservedSize)}，原始大小基线 ${formatSize(file.originalSize)}`
+  }
+  if (file.localCheckStatus === 'MISSING') return '预期本地路径未发现，可能尚未下载或未放入扫描目录'
+  if (file.localCheckStatus === 'BASELINE_MISSING') return '历史记录没有原始大小基线；可确认重新上传并以当前本地大小建立新基线'
+  if (file.localCheckStatus === 'UNVERIFIABLE') return '文件名、分组、数据库大小或本地路径无法安全核对'
+  if (file.localCheckTime) return `最近检查：${formatDate(file.localCheckTime)}`
+  return '尚未执行本地检查'
 }
 
 function dlState(fileKey: string) {
@@ -512,6 +664,24 @@ function unfreezeLabel(fileKey: string) {
   return '解冻'
 }
 
+function reuploadState(fileKey: string) {
+  return store.reuploadStates.get(fileKey) || { status: 'idle' }
+}
+
+function canReupload(file: FileItem) {
+  return file.localCheckStatus === 'SIZE_CHANGED' || file.localCheckStatus === 'BASELINE_MISSING'
+}
+
+function reuploadLabel(fileKey: string) {
+  const state = reuploadState(fileKey)
+  if (state.status === 'requesting') return '准备覆盖上传...'
+  if (state.status === 'running') return '覆盖上传中...'
+  if (state.status === 'done') return '已完成'
+  if (state.status === 'unknown') return '结果未知'
+  if (state.status === 'failed') return '上传失败'
+  return '重新上传'
+}
+
 function doSearch() {
   store.setKeyword(searchInput.value)
 }
@@ -532,6 +702,22 @@ function onSelectionChange(rows: FileItem[]) {
 function openPreview(file: FileItem) {
   previewFile.value = file
   previewVisible.value = true
+}
+
+function openReupload(file: FileItem) {
+  reuploadFile.value = file
+  reuploadVisible.value = true
+}
+
+async function doReupload() {
+  if (!reuploadFile.value) return
+  reuploadLoading.value = true
+  try {
+    await store.reuploadLocal(reuploadFile.value)
+    reuploadVisible.value = false
+  } finally {
+    reuploadLoading.value = false
+  }
 }
 
 function openAssign() {
@@ -594,6 +780,15 @@ async function doSync() {
     await store.syncRemote()
   } finally {
     syncLoading.value = false
+  }
+}
+
+async function doLocalScan() {
+  localScanLoading.value = true
+  try {
+    await store.scanLocal()
+  } finally {
+    localScanLoading.value = false
   }
 }
 
@@ -826,6 +1021,14 @@ onUnmounted(() => {
 .grid-name small {
   color: var(--hive-muted);
 }
+.grid-local-check--SIZE_MATCHED { color: var(--hive-success) !important; }
+.grid-local-check--SIZE_CHANGED { color: var(--hive-danger) !important; }
+.grid-local-check--BASELINE_MISSING { color: var(--hive-warning) !important; }
+.grid-local-check--UNVERIFIABLE { color: var(--hive-warning) !important; }
+.reupload-detail-list { display: grid; gap: 10px; margin-bottom: 16px; }
+.reupload-detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 0.86rem; }
+.reupload-detail-list span { color: var(--hive-muted); }
+.reupload-detail-list strong { text-align: right; word-break: break-word; }
 .pagination-row {
   display: flex;
   justify-content: center;

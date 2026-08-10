@@ -34,7 +34,6 @@
               </div>
             </template>
             <el-table class="category-table" :data="categories" v-loading="catLoading" size="small" style="width: 100%" :row-class-name="categoryRowClass" @row-click="row => selectCategory(row.code)">
-              <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
               <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
               <el-table-column prop="storageClass" label="存储层" width="92" />
               <el-table-column label="视图" width="76">
@@ -80,7 +79,6 @@
                   </div>
                   <div v-if="selectedCategory" class="card-title-meta">
                     <strong>{{ selectedCategory.name }}</strong>
-                    <span>{{ selectedCategory.code }}</span>
                   </div>
                   <div v-else class="card-title-meta">选择分类后管理分组</div>
                 </div>
@@ -95,7 +93,6 @@
             </template>
             <el-empty v-if="!selectedCat" description="请先从左侧选择分类" :image-size="72" />
             <el-table v-else :data="groups" v-loading="groupLoading" size="small" stripe style="width: 100%" empty-text="暂无分组">
-              <el-table-column prop="groupCode" label="编码" min-width="130" show-overflow-tooltip />
               <el-table-column prop="groupName" label="名称" min-width="150" show-overflow-tooltip />
               <el-table-column prop="sortOrder" label="排序" width="72" align="center" />
               <el-table-column label="操作" width="104" fixed="right">

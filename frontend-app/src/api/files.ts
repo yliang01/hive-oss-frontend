@@ -1,5 +1,5 @@
 import client from './client'
-import type { FileItem, FilePage, SyncResult, DownloadTaskStatus, UnfreezeTaskStatus } from '@/types'
+import type { FileItem, FilePage, SyncResult, LocalScanResult, LocalReuploadStart, LocalReuploadTaskStatus, DownloadTaskStatus, UnfreezeTaskStatus } from '@/types'
 
 export const listFiles = (category: string, params: {
   page: number
@@ -33,6 +33,15 @@ export const cleanupLocal = (category: string, fileKeys: string[]) =>
 
 export const syncRemote = (category: string) =>
   client.post<SyncResult>(`/categories/${category}/files/sync-remote`)
+
+export const scanLocal = (category: string) =>
+  client.post<LocalScanResult>(`/categories/${category}/files/scan-local`)
+
+export const startLocalReupload = (category: string, data: { fileKey: string, localCheckTime: string, observedSize: number }) =>
+  client.post<LocalReuploadStart>(`/categories/${category}/files:reupload-local`, data)
+
+export const getLocalReuploadStatus = (category: string, taskId: string) =>
+  client.get<LocalReuploadTaskStatus>(`/categories/${category}/files/local-reupload-tasks/${taskId}`)
 
 export const createDownloadTask = (category: string, fileKey: string) =>
   client.post(`/categories/${category}/files/download-task/${fileKey}`)

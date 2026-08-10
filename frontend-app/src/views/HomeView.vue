@@ -140,7 +140,7 @@
                 <div class="category-main">
                   <div class="cat-name">{{ cat.name || cat.code }}</div>
                   <div class="cat-meta">
-                    <span>{{ cat.code }}</span>
+                    <span>{{ variantLabel(cat.uiVariant) }}</span>
                     <span>{{ cat.storageClass }}</span>
                   </div>
                 </div>
@@ -196,6 +196,12 @@ const stateLabel = computed(() => {
 
 function fmtDate(iso: string) {
   return formatDate(iso)
+}
+
+function variantLabel(variant: string | undefined) {
+  if (variant === 'image') return '图片视图'
+  if (variant === 'archive') return '归档视图'
+  return '文件视图'
 }
 
 function backupTagType(status: string) {
