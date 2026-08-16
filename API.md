@@ -39,6 +39,8 @@
 
 > Deprecated：该接口为兼容别名，前端统一使用 `files:assign`。
 
+若任一文件存在本地下载副本或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本或等待下载结束。
+
 ## 分类/分组管理（管理员）
 
 ### A1. 分类列表（管理端）
@@ -76,6 +78,8 @@
 ### A9. 删除分组
 
 `DELETE /category-admin/categories/{categoryCode}/groups/{groupId}`
+
+分组内任一文件存在本地下载副本或正在下载时，删除分组返回 `409 Conflict`。
 
 ## 文件管理
 
@@ -151,6 +155,10 @@
 
 `POST /categories/{category}/files/download-task/{fileKey}`
 
+目标本地副本已存在时返回 `409 Conflict`，需先释放本地副本。
+
+下载副本按 `{downloadDir}/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 落盘。旧版平铺下载文件不会自动迁移。
+
 ### 13. 查询下载任务状态
 
 `GET /categories/{category}/files/download-task-status/{fileKey}`
@@ -160,14 +168,21 @@
 ```json
 {
   "status": "success",
-  "progress": 100,
-  "downloadUrl": "file:///C:/data/hive/download/example.txt"
+  "progress": 100
 }
 ```
+
+`success` 仅表示服务端下载任务完成，不返回下载目录中的物理路径或文件存在状态。
+
+文件列表中的 `localFileAvailable` 是后端根据下载目录实时计算的操作控制字段：为 `true` 时前端允许释放本地副本并禁用再次下载。该字段不包含或展示物理路径。
 
 ### 14. 释放本地文件
 
 `POST /categories/{category}/files/release-local/{fileKey}`
+
+删除下载目录中的本地副本并清空下载任务状态；目标文件已不存在时仍按成功处理。
+
+下载任务进行中时返回 `409 Conflict`。
 
 ### 15. 上传文件
 

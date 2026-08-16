@@ -256,7 +256,6 @@ export const useFilesStore = defineStore('files', () => {
         const d = res.data
         if (d.status === 'success') {
           downloadStates.value.set(fileKey, { status: 'done' })
-          if (d.downloadUrl) triggerBrowserDownload(d.downloadUrl)
           setTimeout(() => {
             if (runId !== taskRunId.value) return
             downloadStates.value.delete(fileKey)
@@ -402,13 +401,3 @@ export const useFilesStore = defineStore('files', () => {
     toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
   }
 })
-
-function triggerBrowserDownload(url: string) {
-  const a = document.createElement('a')
-  a.href = url
-  a.download = ''
-  a.style.display = 'none'
-  document.body.appendChild(a)
-  a.click()
-  setTimeout(() => document.body.removeChild(a), 100)
-}

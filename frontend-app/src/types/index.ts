@@ -52,9 +52,8 @@ export interface FileItem {
   downloadable: boolean
   downloadStatus?: 'success' | 'failed' | 'downloading'
   downloadProgress?: number
+  localFileAvailable: boolean
   deletable: boolean
-  localPath?: string
-  localPathExists?: boolean
   localCheckStatus?: 'SIZE_MATCHED' | 'SIZE_CHANGED' | 'MISSING' | 'BASELINE_MISSING' | 'UNVERIFIABLE'
   localCheckTime?: string
   localCheckObservedSize?: number
@@ -85,7 +84,6 @@ export interface BackupAck {
 export interface DownloadTaskStatus {
   status: 'success' | 'failed' | 'downloading'
   progress?: number
-  downloadUrl?: string
 }
 
 export interface UnfreezeTaskStatus {

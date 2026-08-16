@@ -238,6 +238,13 @@
                   >
                     {{ dlLabel(row.fileKey) }}
                   </el-button>
+                  <el-button
+                    v-if="row.localFileAvailable && row.downloadStatus !== 'downloading'"
+                    link
+                    size="small"
+                    type="warning"
+                    @click="confirmRelease(row.fileKey)"
+                  >释放本地</el-button>
 
                   <!-- 预览 -->
                   <el-button
@@ -268,15 +275,6 @@
 
                 </div>
 
-                <!-- 本地路径操作 -->
-                <div v-if="row.localPath" class="action-row">
-                  <el-button link size="small" @click="copy(row.localPath)">复制路径</el-button>
-                  <el-button link size="small" type="warning" @click="confirmRelease(row.fileKey)">释放本地</el-button>
-                  <el-tooltip :content="row.localPathExists === undefined ? '未知' : row.localPathExists ? '本地文件存在' : '本地文件不存在'">
-                    <span v-if="row.localPathExists" class="local-ok">✓</span>
-                    <span v-else-if="row.localPathExists === false" class="local-missing">✗</span>
-                  </el-tooltip>
-                </div>
               </div>
             </template>
           </el-table-column>
@@ -633,7 +631,7 @@ function localCheckTip(file: FileItem) {
   if (file.localCheckStatus === 'SIZE_CHANGED') {
     return `当前本地 ${formatSize(file.localCheckObservedSize)}，原始大小基线 ${formatSize(file.originalSize)}`
   }
-  if (file.localCheckStatus === 'MISSING') return '预期本地路径未发现，可能尚未下载或未放入扫描目录'
+  if (file.localCheckStatus === 'MISSING') return '扫描目录中未发现匹配的本地副本'
   if (file.localCheckStatus === 'BASELINE_MISSING') return '历史记录没有原始大小基线；可确认重新上传并以当前本地大小建立新基线'
   if (file.localCheckStatus === 'UNVERIFIABLE') return '文件名、分组、数据库大小或本地路径无法安全核对'
   if (file.localCheckTime) return `最近检查：${formatDate(file.localCheckTime)}`
@@ -953,8 +951,6 @@ onUnmounted(() => {
 .truncated-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .action-cell { display: flex; flex-direction: column; gap: 4px; }
 .action-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.local-ok { color: #67c23a; font-size: 1.1em; cursor: default; }
-.local-missing { color: #f56c6c; font-size: 1.1em; cursor: default; }
 .grid-section {
   background: var(--hive-surface-solid);
   border: 1px solid var(--hive-border-soft);
