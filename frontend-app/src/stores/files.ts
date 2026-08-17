@@ -165,9 +165,7 @@ export const useFilesStore = defineStore('files', () => {
     const taskCategory = category.value
     reuploadStates.value.set(file.fileKey, { status: 'requesting' })
     try {
-      const res = await filesApi.startLocalReupload(taskCategory, {
-        fileKey: file.fileKey,
-      })
+      const res = await filesApi.startLocalReupload(taskCategory, { fileKey: file.fileKey })
       if (runId !== taskRunId.value) return
       reuploadStates.value.set(file.fileKey, { status: 'running', taskId: res.data.taskId })
       void pollLocalReupload(taskCategory, file.fileKey, res.data.taskId, runId)
@@ -190,7 +188,7 @@ export const useFilesStore = defineStore('files', () => {
         if (task.status === 'RUNNING') continue
         if (task.status === 'SUCCESS') {
           reuploadStates.value.set(fileKey, { status: 'done', taskId, message: task.message })
-          ElMessage.success(task.message || '本地版本已覆盖上传')
+          ElMessage.success(task.message || '本地修改已覆盖上传')
           await Promise.all([refreshFiles([fileKey]), loadMeta()])
         } else if (task.status === 'UNKNOWN') {
           reuploadStates.value.set(fileKey, { status: 'unknown', taskId, message: task.message })

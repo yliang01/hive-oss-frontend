@@ -167,7 +167,7 @@
               <el-tag size="small" :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="本地校验" width="140">
+          <el-table-column label="本地副本" width="140">
             <template #default="{ row }">
               <el-tooltip :content="localCheckTip(row)" placement="top">
                 <el-tag size="small" :type="localCheckTagType(row)" effect="plain">{{ localCheckLabel(row) }}</el-tag>
@@ -228,7 +228,7 @@
 
                   <!-- 预览 -->
                   <el-button
-                    v-if="store.categoryMeta?.uiVariant !== 'archive'"
+                    v-if="store.categoryMeta?.uiVariant !== 'archive' && store.categoryMeta?.storageClass !== 'ARCHIVE'"
                     link
                     size="small"
                     :disabled="!row.previewable || !row.previewUrl"
@@ -343,14 +343,14 @@
         <div class="reupload-detail-list">
           <div><span>文件</span><strong>{{ reuploadFile.fileName }}</strong></div>
           <div><span>分组</span><strong>{{ reuploadFile.groupName || '未分组' }}</strong></div>
-          <div><span>原始大小基线</span><strong>{{ reuploadFile.originalSize == null ? '未建立（将以当前文件建立）' : formatSize(reuploadFile.originalSize) }}</strong></div>
-          <div><span>当前本地大小</span><strong>{{ formatSize(reuploadFile.localCheckObservedSize) }}</strong></div>
+          <div><span>原始大小基线</span><strong>{{ reuploadFile.originalSize == null ? '未建立' : formatSize(reuploadFile.originalSize) }}</strong></div>
+          <div><span>当前本地副本大小</span><strong>{{ formatSize(reuploadFile.localCheckObservedSize) }}</strong></div>
           <div><span>云端存储大小</span><strong>{{ formatSize(reuploadFile.size) }}</strong></div>
         </div>
         <el-alert
           :title="reuploadFile.localCheckStatus === 'BASELINE_MISSING'
-            ? '无法确认本地文件是否与历史版本一致。确认后会覆盖同一云端对象，并以当前本地大小建立新的校验基线；系统内无法回滚。'
-            : '确认后会以扫描目录中的本地文件覆盖同一云端对象，系统内无法回滚。'"
+            ? '该记录没有原始大小基线。确认后会以当前本地副本覆盖云端对象，并建立新的大小基线；系统内无法回滚。'
+            : '确认后会以已修改的本地下载副本覆盖同一云端对象，并更新原始大小基线；系统内无法回滚。'"
           type="warning"
           :closable="false"
           show-icon
@@ -366,7 +366,7 @@
     <UploadModal v-model="uploadVisible" :category="store.category" @uploaded="store.loadFiles(store.currentPage)" />
 
     <!-- 预览 -->
-    <PreviewModal v-model="previewVisible" :file="previewFile" @close="previewFile = null" />
+    <PreviewModal v-model="previewVisible" :file="previewFile" :base-url="apiBase" @close="previewFile = null" />
   </div>
 </template>
 
@@ -395,6 +395,7 @@ const assignGroupCode = ref('')
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
+const apiBase = import.meta.env.VITE_API_BASE ?? ''
 const reuploadVisible = ref(false)
 const reuploadLoading = ref(false)
 const reuploadFile = ref<FileItem | null>(null)
@@ -482,8 +483,7 @@ const syncDetailRows = computed(() => {
 function buildUrl(raw: string | undefined) {
   if (!raw) return ''
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
-  const base = import.meta.env.VITE_API_BASE ?? ''
-  return base + (raw.startsWith('/') ? raw : '/' + raw)
+  return apiBase + (raw.startsWith('/') ? raw : '/' + raw)
 }
 
 function truncate(s: string | undefined, len: number) {
@@ -495,7 +495,9 @@ function truncate(s: string | undefined, len: number) {
 function previewBlockedMsg(reason: string | undefined) {
   const map: Record<string, string> = {
     ARCHIVE: '归档分类不支持在线预览',
-    FROZEN: '文件未解冻，暂不可预览',
+    LOCAL_MISSING: '请先下载到本地',
+    ZIP_ARCHIVE: 'ZIP 文件不支持在线预览',
+    RECORD_NOT_READY: '文件当前状态不允许预览',
     TOO_LARGE: '文件过大，暂不支持预览',
     UNSUPPORTED_TYPE: '当前文件类型不支持预览',
     OSS_ONLY: '仅云端存在，无解密信息不可预览',
@@ -534,8 +536,8 @@ function localCheckLabel(file: FileItem) {
   const map: Record<string, string> = {
     SIZE_MATCHED: '大小一致',
     SIZE_CHANGED: '本地已改动',
-    MISSING: '本地副本未发现',
-    BASELINE_MISSING: '未建立大小基线',
+    MISSING: '尚未下载',
+    BASELINE_MISSING: '未建立基线',
     UNVERIFIABLE: '无法核对',
   }
   return file.localCheckStatus ? map[file.localCheckStatus] || file.localCheckStatus : '未检查'
@@ -550,14 +552,14 @@ function localCheckTagType(file: FileItem) {
 }
 
 function localCheckTip(file: FileItem) {
-  if (file.status !== 'UPLOADED') return '仅已上传记录参与本地检查'
+  if (file.status !== 'UPLOADED') return '仅已上传记录参与本地副本校验'
   if (file.localCheckStatus === 'SIZE_CHANGED') {
-    return `当前本地 ${formatSize(file.localCheckObservedSize)}，原始大小基线 ${formatSize(file.originalSize)}`
+    return `当前本地 ${formatSize(file.localCheckObservedSize)}，原始大小 ${formatSize(file.originalSize)}`
   }
-  if (file.localCheckStatus === 'MISSING') return '扫描目录中未发现匹配的本地副本'
-  if (file.localCheckStatus === 'BASELINE_MISSING') return '历史记录没有原始大小基线；可确认重新上传并以当前本地大小建立新基线'
-  if (file.localCheckStatus === 'UNVERIFIABLE') return '文件名、分组、数据库大小或本地路径无法安全核对'
-  return '列表刷新时即时检查'
+  if (file.localCheckStatus === 'MISSING') return '请先下载到本地'
+  if (file.localCheckStatus === 'BASELINE_MISSING') return '历史记录没有原始大小基线；可确认重新上传以建立基线'
+  if (file.localCheckStatus === 'UNVERIFIABLE') return '本地副本路径或文件类型无法安全核对'
+  return '下载副本与原始大小一致'
 }
 
 function dlState(fileKey: string) {
@@ -685,7 +687,7 @@ async function confirmDeleteAll() {
 }
 
 async function confirmRelease(fileKey: string) {
-  await ElMessageBox.confirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。', '确认', { type: 'warning' })
+  await ElMessageBox.confirm('确定要释放本地文件吗？此操作会删除本地副本及其中的本地修改，但不会影响云端文件。', '确认', { type: 'warning' })
   await store.releaseLocal(fileKey)
 }
 
@@ -930,14 +932,6 @@ onUnmounted(() => {
 .grid-name small {
   color: var(--hive-muted);
 }
-.grid-local-check--SIZE_MATCHED { color: var(--hive-success) !important; }
-.grid-local-check--SIZE_CHANGED { color: var(--hive-danger) !important; }
-.grid-local-check--BASELINE_MISSING { color: var(--hive-warning) !important; }
-.grid-local-check--UNVERIFIABLE { color: var(--hive-warning) !important; }
-.reupload-detail-list { display: grid; gap: 10px; margin-bottom: 16px; }
-.reupload-detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 0.86rem; }
-.reupload-detail-list span { color: var(--hive-muted); }
-.reupload-detail-list strong { text-align: right; word-break: break-word; }
 .pagination-row {
   display: flex;
   justify-content: center;
@@ -950,6 +944,14 @@ onUnmounted(() => {
 .mt-8 { margin-top: 8px; }
 .text-muted { color: var(--hive-muted); }
 .small { font-size: 0.875rem; }
+.grid-local-check--SIZE_MATCHED { color: var(--hive-success) !important; }
+.grid-local-check--SIZE_CHANGED { color: var(--hive-danger) !important; }
+.grid-local-check--BASELINE_MISSING { color: var(--hive-warning) !important; }
+.grid-local-check--UNVERIFIABLE { color: var(--hive-warning) !important; }
+.reupload-detail-list { display: grid; gap: 10px; margin-bottom: 16px; }
+.reupload-detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 0.86rem; }
+.reupload-detail-list span { color: var(--hive-muted); }
+.reupload-detail-list strong { text-align: right; word-break: break-word; }
 @media (max-width: 760px) {
   .toolbar-filter, .toolbar-actions, .hero-actions, .hero-side, .sync-compact { width: 100%; }
   .hero-side { align-items: stretch; }

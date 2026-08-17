@@ -39,7 +39,7 @@
 
 > Deprecated：该接口为兼容别名，前端统一使用 `files:assign`。
 
-若任一文件存在本地下载副本、本地源文件，或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本、移走本地源文件或等待下载结束。
+若任一文件存在本地下载副本或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本或等待下载结束。
 
 ## 分类/分组管理（管理员）
 
@@ -79,7 +79,7 @@
 
 `DELETE /category-admin/categories/{categoryCode}/groups/{groupId}`
 
-分组内任一文件存在本地下载副本、本地源文件，或正在下载时，删除分组返回 `409 Conflict`。
+分组内任一文件存在本地下载副本或正在下载时，删除分组返回 `409 Conflict`。
 
 ## 文件管理
 
@@ -105,7 +105,7 @@
 
 说明：前端在标记删除、解冻、下载、本地释放等操作后，用该接口按 `fileKey` 批量刷新当前列表中的记录状态。旧的单文件详情接口 `GET /categories/{category}/files/{fileKey}` 已下线。
 
-文件列表和批量详情会即时检查返回记录在 `hive.localScanDir` 中的本地源文件，响应中的 `localCheckStatus`、`localCheckObservedSize` 不会持久化或缓存。
+文件列表和批量详情会即时检查 `hive.downloadDir` 中的系统下载副本。`localCheckStatus` 比较副本大小和上传时保存的 `originalSize`：`SIZE_CHANGED` 表示本地副本可能被修改，`MISSING` 表示尚未下载。该检查不写入数据库。
 
 ### 8. 预览文件
 
@@ -115,16 +115,18 @@
 
 文件详情中的预览字段由后端计算：
 
-- `previewable=true` 时提供 `previewUrl` 和 `mimeType`；前端按 MIME 使用图片或文档弹窗展示。
-- `thumbnailUrl` 仅在已有可读取缩略图时提供，图片网格优先使用它。
+- `previewable=true` 时提供 `previewUrl` 和 `mimeType`；主预览接口只读取 `hive.downloadDir` 中的本地副本，前端按 MIME 使用图片或文档弹窗展示。
+- `thumbnailUrl` 仅在普通图片分类已有可读取缩略图时提供，图片网格优先使用它；缩略图仍从 OSS 读取，不代表主文件已下载。
 - `previewable=false` 时，`previewBlockedReason` 说明禁止原因。判定按以下顺序执行，命中首项即停止：
-  - `ARCHIVE`：分类 `uiVariant=archive`，不提供在线预览。
+  - `ARCHIVE`：归档存储分类或 `uiVariant=archive`，不提供在线预览。
   - `OSS_ONLY`：只有 OSS 对象，缺少解密所需文件名信息。
-  - `FROZEN`：归档对象尚未解冻或有效期已过。
+  - `RECORD_NOT_READY`：记录不是 `UPLOADED`。
+  - `ZIP_ARCHIVE`：ZIP 文件不支持在线预览。
   - `TOO_LARGE`：文件大于 `hive.preview.max-size-bytes`，默认 10 MiB。
   - `UNSUPPORTED_TYPE`：扩展名不在预览白名单中。
+  - `LOCAL_MISSING`：尚未下载到本地目录。
 
-主预览接口对 `FROZEN` 返回 `423 Locked`，对 `TOO_LARGE` 返回 `413 Payload Too Large`，其余禁止预览原因返回 `415 Unsupported Media Type`。该判定由服务端重复执行，不能仅依赖前端按钮状态。
+主预览接口对 `TOO_LARGE` 返回 `413 Payload Too Large`，对 `LOCAL_MISSING` 和 `RECORD_NOT_READY` 返回 `409 Conflict`，其他禁止预览原因返回 `415 Unsupported Media Type`。该判定由服务端重复执行，不能仅依赖前端按钮状态。
 
 ### 9. 标记删除文件
 
@@ -213,7 +215,7 @@
 
 `POST /categories/{category}/files/release-local/{fileKey}`
 
-删除下载目录中的常规本地副本并清空下载任务状态；目标文件已不存在时仍按成功处理。目标路径不是常规文件时请求失败，避免误删目录或链接。
+删除下载目录中的常规本地副本并清空下载任务状态；目标文件已不存在时仍按成功处理。该操作会一并删除本地修改；目标路径不是常规文件时请求失败，避免误删目录或链接。
 
 下载任务进行中时返回 `409 Conflict`。
 
@@ -233,7 +235,7 @@
 }
 ```
 
-后端会重新检查本地源文件，仅大小已变或未建立大小基线的文件可以重新上传。
+后端会重新检查 `hive.downloadDir` 中的本地副本，仅大小已变或未建立大小基线的文件可以重新上传。上传成功后，该副本大小成为新的 `originalSize` 基线。
 
 ## 同步能力
 
