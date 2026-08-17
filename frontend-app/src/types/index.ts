@@ -36,9 +36,8 @@ export interface FileItem {
   groupCode?: string
   previewable: boolean
   previewUrl?: string
-  previewBlockedReason?: 'FROZEN' | 'TOO_LARGE' | 'UNSUPPORTED_TYPE' | 'OSS_ONLY'
+  previewBlockedReason?: 'ARCHIVE' | 'FROZEN' | 'TOO_LARGE' | 'UNSUPPORTED_TYPE' | 'OSS_ONLY'
   thumbnailUrl?: string
-  thumbStatus?: 'PENDING'
   restorable: boolean
   downloadable: boolean
   downloadStatus?: 'success' | 'failed' | 'downloading'

@@ -494,6 +494,7 @@ function truncate(s: string | undefined, len: number) {
 
 function previewBlockedMsg(reason: string | undefined) {
   const map: Record<string, string> = {
+    ARCHIVE: '归档分类不支持在线预览',
     FROZEN: '文件未解冻，暂不可预览',
     TOO_LARGE: '文件过大，暂不支持预览',
     UNSUPPORTED_TYPE: '当前文件类型不支持预览',

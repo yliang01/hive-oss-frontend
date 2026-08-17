@@ -113,6 +113,19 @@
 
 说明：前端通过文件详情中的 `previewUrl` 字段间接访问该地址（`img/iframe src`），不是 `fetch/xhr` 显式调用。
 
+文件详情中的预览字段由后端计算：
+
+- `previewable=true` 时提供 `previewUrl` 和 `mimeType`；前端按 MIME 使用图片或文档弹窗展示。
+- `thumbnailUrl` 仅在已有可读取缩略图时提供，图片网格优先使用它。
+- `previewable=false` 时，`previewBlockedReason` 说明禁止原因。判定按以下顺序执行，命中首项即停止：
+  - `ARCHIVE`：分类 `uiVariant=archive`，不提供在线预览。
+  - `OSS_ONLY`：只有 OSS 对象，缺少解密所需文件名信息。
+  - `FROZEN`：归档对象尚未解冻或有效期已过。
+  - `TOO_LARGE`：文件大于 `hive.preview.max-size-bytes`，默认 10 MiB。
+  - `UNSUPPORTED_TYPE`：扩展名不在预览白名单中。
+
+主预览接口对 `FROZEN` 返回 `423 Locked`，对 `TOO_LARGE` 返回 `413 Payload Too Large`，其余禁止预览原因返回 `415 Unsupported Media Type`。该判定由服务端重复执行，不能仅依赖前端按钮状态。
+
 ### 9. 标记删除文件
 
 `POST /categories/{category}/files:mark-delete`
