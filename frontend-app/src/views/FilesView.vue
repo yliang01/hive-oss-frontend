@@ -189,7 +189,7 @@
             </template>
           </el-table-column>
           <el-table-column label="更新时间" width="140" :formatter="(r) => formatDate(r.updateTime)" />
-          <el-table-column label="解冻时间" width="140">
+          <el-table-column v-if="store.categoryMeta?.storageClass === 'ARCHIVE'" label="解冻时间" width="140">
             <template #default="{ row }">{{ row.unfreezeTime ? formatDate(row.unfreezeTime) : '-' }}</template>
           </el-table-column>
           <el-table-column label="操作" width="280" fixed="right">
@@ -198,6 +198,7 @@
                 <div class="action-row">
                   <!-- 解冻 -->
                   <el-button
+                    v-if="store.categoryMeta?.storageClass === 'ARCHIVE'"
                     link
                     size="small"
                     :disabled="!row.restorable || unfreezeState(row.fileKey).status !== 'idle'"

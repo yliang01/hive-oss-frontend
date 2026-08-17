@@ -131,6 +131,8 @@
 
 `POST /categories/{category}/files/unfreeze/{fileKey}`
 
+仅 `storageClass` 为 `ARCHIVE` 的分类支持解冻。文件页仅在这类分类显示“解冻时间”列和“解冻”按钮；按钮是否可点击仍由记录的 `restorable` 字段决定。
+
 响应体示例：
 
 ```json
@@ -152,6 +154,8 @@
   "unfreezeTime": "2026-05-27T10:00:00"
 }
 ```
+
+`unfreezeStatus` 用于页面刷新后恢复 `IN_PROGRESS` 解冻任务的轮询，不作为解冻按钮或时间列的显示条件。
 
 ### 12. 创建下载任务
 
