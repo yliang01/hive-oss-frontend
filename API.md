@@ -39,7 +39,7 @@
 
 > Deprecated：该接口为兼容别名，前端统一使用 `files:assign`。
 
-若任一文件存在本地下载副本或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本或等待下载结束。
+若任一文件存在本地下载副本、本地源文件，或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本、移走本地源文件或等待下载结束。
 
 ## 分类/分组管理（管理员）
 
@@ -79,7 +79,7 @@
 
 `DELETE /category-admin/categories/{categoryCode}/groups/{groupId}`
 
-分组内任一文件存在本地下载副本或正在下载时，删除分组返回 `409 Conflict`。
+分组内任一文件存在本地下载副本、本地源文件，或正在下载时，删除分组返回 `409 Conflict`。
 
 ## 文件管理
 
@@ -104,6 +104,8 @@
 `GET /categories/{category}/files:batch-get?fileKeys=key1&fileKeys=key2`
 
 说明：前端在标记删除、解冻、下载、本地释放等操作后，用该接口按 `fileKey` 批量刷新当前列表中的记录状态。旧的单文件详情接口 `GET /categories/{category}/files/{fileKey}` 已下线。
+
+文件列表和批量详情会即时检查返回记录在 `hive.localScanDir` 中的本地源文件，响应中的 `localCheckStatus`、`localCheckObservedSize` 不会持久化或缓存。
 
 ### 8. 预览文件
 
@@ -187,6 +189,20 @@
 ### 15. 上传文件
 
 `POST /categories/{category}/files/upload` (`multipart/form-data`)
+
+### 本地重新上传
+
+`POST /categories/{category}/files:reupload-local`
+
+请求体：
+
+```json
+{
+  "fileKey": "key1"
+}
+```
+
+后端会重新检查本地源文件，仅大小已变或未建立大小基线的文件可以重新上传。
 
 ## 同步能力
 

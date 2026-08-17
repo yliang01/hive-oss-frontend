@@ -15,15 +15,6 @@ export interface Category {
   lastSyncDbToOssMismatched?: number
   lastSyncSkipped?: number
   lastSyncMessage?: string
-  lastLocalCheckTime?: string
-  lastLocalCheckStatus?: 'SUCCESS' | 'FAILED'
-  lastLocalCheckRecordTotal?: number
-  lastLocalCheckSizeMatched?: number
-  lastLocalCheckSizeChanged?: number
-  lastLocalCheckMissing?: number
-  lastLocalCheckUnverifiable?: number
-  lastLocalCheckBaselineMissing?: number
-  lastLocalCheckMessage?: string
 }
 
 export interface Group {
@@ -55,7 +46,6 @@ export interface FileItem {
   localFileAvailable: boolean
   deletable: boolean
   localCheckStatus?: 'SIZE_MATCHED' | 'SIZE_CHANGED' | 'MISSING' | 'BASELINE_MISSING' | 'UNVERIFIABLE'
-  localCheckTime?: string
   localCheckObservedSize?: number
   mimeType?: string
 }
@@ -101,18 +91,6 @@ export interface SyncResult {
   ossToDbMismatched: number
   dbToOssMismatched: number
   skipped: number
-}
-
-export interface LocalScanResult {
-  status?: 'SUCCESS' | 'FAILED'
-  checkedAt?: string
-  message?: string
-  recordTotal: number
-  sizeMatched: number
-  sizeChanged: number
-  missing: number
-  baselineMissing: number
-  unverifiable: number
 }
 
 export interface LocalReuploadStart {

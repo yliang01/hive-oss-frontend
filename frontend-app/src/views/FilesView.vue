@@ -21,9 +21,6 @@
             <el-button size="large" :loading="syncLoading" @click="doSync">
               <el-icon><Refresh /></el-icon>扫描云端
             </el-button>
-            <el-button size="large" :loading="localScanLoading" @click="doLocalScan">
-              <el-icon><Refresh /></el-icon>检查本地
-            </el-button>
           </div>
 
           <div class="sync-compact" :class="syncStatusClass">
@@ -70,24 +67,6 @@
             </el-popover>
           </div>
 
-          <div class="sync-compact" :class="localScanStatusClass">
-            <span class="sync-dot" />
-            <div class="sync-copy">
-              <div class="sync-compact-title">{{ localScanCompactTitle }}</div>
-              <div class="sync-compact-meta">{{ localScanCompactMeta }}</div>
-            </div>
-            <el-popover placement="bottom-end" trigger="click" width="320">
-              <template #reference>
-                <el-button link size="small">详情</el-button>
-              </template>
-              <div class="sync-detail-list">
-                <div v-for="row in localScanDetailRows" :key="row.label" class="sync-detail-row">
-                  <span>{{ row.label }}</span>
-                  <strong>{{ row.value }}</strong>
-                </div>
-              </div>
-            </el-popover>
-          </div>
         </div>
       </header>
 
@@ -415,7 +394,6 @@ const assignGroupCode = ref('')
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
-const localScanLoading = ref(false)
 const reuploadVisible = ref(false)
 const reuploadLoading = ref(false)
 const reuploadFile = ref<FileItem | null>(null)
@@ -500,63 +478,6 @@ const syncDetailRows = computed(() => {
   return rows
 })
 
-const localScanStatusClass = computed(() => {
-  if (localScanLoading.value) return 'sync-compact--running'
-  const meta = store.categoryMeta
-  if (!meta?.lastLocalCheckTime) return 'sync-compact--empty'
-  if (meta.lastLocalCheckStatus === 'FAILED') return 'sync-compact--failed'
-  return 'sync-compact--success'
-})
-
-const localScanCompactTitle = computed(() => {
-  if (localScanLoading.value) return '本地检查：检查中'
-  const meta = store.categoryMeta
-  if (!meta?.lastLocalCheckTime) return '本地检查：尚未检查'
-  if (meta.lastLocalCheckStatus === 'FAILED') return '本地检查失败'
-  return `本地检查：${formatDate(meta.lastLocalCheckTime)}`
-})
-
-const localScanCompactMeta = computed(() => {
-  if (localScanLoading.value) return '仅检查已上传记录的预期本地路径'
-  const meta = store.categoryMeta
-  if (!meta?.lastLocalCheckTime) return '点击“检查本地”核对已上传记录的本地副本'
-  if (meta.lastLocalCheckStatus === 'FAILED') return `${formatDate(meta.lastLocalCheckTime)} · 查看详情`
-  return `大小一致 ${meta.lastLocalCheckSizeMatched ?? 0} · 已改动 ${meta.lastLocalCheckSizeChanged ?? 0} · 未发现 ${meta.lastLocalCheckMissing ?? 0} · 基线缺失 ${meta.lastLocalCheckBaselineMissing ?? 0}`
-})
-
-const localScanDetailRows = computed(() => {
-  const meta = store.categoryMeta
-  if (localScanLoading.value) {
-    return [
-      { label: '状态', value: '检查中' },
-      { label: '说明', value: '仅检查已上传记录的预期本地路径' },
-    ]
-  }
-  if (!meta?.lastLocalCheckTime) {
-    return [
-      { label: '状态', value: '尚未检查' },
-      { label: '说明', value: '仅按数据库已登记的分组和文件名检查本地副本' },
-    ]
-  }
-  const rows = [
-    { label: '状态', value: meta.lastLocalCheckStatus === 'FAILED' ? '失败' : '成功' },
-    { label: '时间', value: formatDate(meta.lastLocalCheckTime) },
-  ]
-  if (meta.lastLocalCheckStatus === 'FAILED') {
-    rows.push({ label: '错误', value: meta.lastLocalCheckMessage || '请检查后端日志' })
-    return rows
-  }
-  rows.push(
-    { label: '已上传记录', value: String(meta.lastLocalCheckRecordTotal ?? 0) },
-    { label: '大小一致', value: String(meta.lastLocalCheckSizeMatched ?? 0) },
-    { label: '本地已改动', value: String(meta.lastLocalCheckSizeChanged ?? 0) },
-    { label: '本地副本未发现', value: String(meta.lastLocalCheckMissing ?? 0) },
-    { label: '未建立大小基线', value: String(meta.lastLocalCheckBaselineMissing ?? 0) },
-    { label: '无法核对', value: String(meta.lastLocalCheckUnverifiable ?? 0) },
-  )
-  return rows
-})
-
 function buildUrl(raw: string | undefined) {
   if (!raw) return ''
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
@@ -634,8 +555,7 @@ function localCheckTip(file: FileItem) {
   if (file.localCheckStatus === 'MISSING') return '扫描目录中未发现匹配的本地副本'
   if (file.localCheckStatus === 'BASELINE_MISSING') return '历史记录没有原始大小基线；可确认重新上传并以当前本地大小建立新基线'
   if (file.localCheckStatus === 'UNVERIFIABLE') return '文件名、分组、数据库大小或本地路径无法安全核对'
-  if (file.localCheckTime) return `最近检查：${formatDate(file.localCheckTime)}`
-  return '尚未执行本地检查'
+  return '列表刷新时即时检查'
 }
 
 function dlState(fileKey: string) {
@@ -778,15 +698,6 @@ async function doSync() {
     await store.syncRemote()
   } finally {
     syncLoading.value = false
-  }
-}
-
-async function doLocalScan() {
-  localScanLoading.value = true
-  try {
-    await store.scanLocal()
-  } finally {
-    localScanLoading.value = false
   }
 }
 

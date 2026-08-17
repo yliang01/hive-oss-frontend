@@ -160,31 +160,13 @@ export const useFilesStore = defineStore('files', () => {
     }
   }
 
-  async function scanLocal() {
-    try {
-      const res = await filesApi.scanLocal(category.value)
-      const d = res.data
-      ElMessage.success(`本地检查完成！已改动: ${d.sizeChanged}, 本地副本未发现: ${d.missing}`)
-      await Promise.all([loadMeta(), loadFiles(currentPage.value)])
-    } catch (e: any) {
-      ElMessage.error(e.response?.data?.error ?? '本地检查失败')
-      await loadMeta()
-    }
-  }
-
   async function reuploadLocal(file: FileItem) {
-    if (!file.localCheckTime || file.localCheckObservedSize == null) {
-      ElMessage.error('本地检查结果不完整，请重新检查')
-      return
-    }
     const runId = taskRunId.value
     const taskCategory = category.value
     reuploadStates.value.set(file.fileKey, { status: 'requesting' })
     try {
       const res = await filesApi.startLocalReupload(taskCategory, {
         fileKey: file.fileKey,
-        localCheckTime: file.localCheckTime,
-        observedSize: file.localCheckObservedSize,
       })
       if (runId !== taskRunId.value) return
       reuploadStates.value.set(file.fileKey, { status: 'running', taskId: res.data.taskId })
@@ -396,7 +378,7 @@ export const useFilesStore = defineStore('files', () => {
     selectedKeys, downloadStates, unfreezeStates, reuploadStates,
     totalPages, hasPendingDelete, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
     init, loadFiles, loadMeta, refreshFiles,
-    deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, scanLocal, refreshPage,
+    deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, refreshPage,
     downloadFile, unfreezeFile, reuploadLocal, releaseLocal, assignToGroup,
     toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
   }
