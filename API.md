@@ -131,7 +131,12 @@
 
 `POST /categories/{category}/files/unfreeze/{fileKey}`
 
-仅 `storageClass` 为 `ARCHIVE` 的分类支持解冻。文件页仅在这类分类显示“解冻时间”列和“解冻”按钮；按钮是否可点击仍由记录的 `restorable` 字段决定。
+解冻是向对象存储申请临时恢复归档对象，不会把文件下载到浏览器或 `hive.downloadDir`。仅 `storageClass=ARCHIVE` 的分类支持该接口；其他分类返回 `400 Bad Request`。
+
+- `restorable=true` 表示归档对象当前不可读：`unfreezeTime` 为空或早于当前时间。前端仅在归档分类展示解冻时间和按钮，并以该字段控制按钮可用性。
+- OSS 返回 `NOT_STARTED` 时，服务端发起 restore，写入 `unfreezeStatus=IN_PROGRESS`，返回 `202 Accepted`。
+- OSS 返回 `IN_PROGRESS` 时，服务端保持轮询状态，返回 `202 Accepted`。
+- OSS 返回 `COMPLETED` 时，服务端写入对象存储给出的有效期到 `unfreezeTime`，写入 `unfreezeStatus=COMPLETED`，返回 `200 OK`。在有效期内 `restorable=false`，可以创建下载任务。
 
 响应体示例：
 
@@ -157,11 +162,20 @@
 
 `unfreezeStatus` 用于页面刷新后恢复 `IN_PROGRESS` 解冻任务的轮询，不作为解冻按钮或时间列的显示条件。
 
+轮询返回 `202 Accepted` 表示仍在解冻；返回 `200 OK` 且 `status=COMPLETED` 表示可读取。若返回 `NOT_STARTED` 或 `FAILED`，前端停止轮询并提示用户重试。
+
 ### 12. 创建下载任务
 
 `POST /categories/{category}/files/download-task/{fileKey}`
 
-目标本地副本已存在时返回 `409 Conflict`，需先释放本地副本。
+该接口启动服务端 OSS 下载和解密任务，不会向浏览器返回文件流或本地物理路径。无论前端按钮状态如何，服务端都按以下条件校验：
+
+- 记录 `status` 必须为 `UPLOADED`；`UPLOADING`、`FAILED`、`OSS_ONLY`、`DB_ONLY`、`TO_BE_DELETED` 均不可下载。
+- 归档分类的对象必须已解冻，即 `restorable=false`；冻结对象返回 `423 Locked`。
+- `downloadStatus` 不能是 `downloading`，且目标本地副本不能已存在；任一情况返回 `409 Conflict`。
+- 成功创建任务返回 `200 OK`。失败响应体包含 `{ "error": "..." }`，前端直接展示该消息。
+
+服务端先检查过期任务：记录为 `downloading` 但内存中没有对应任务时，会删除遗留 `.part` 文件并将状态修正为 `failed`；同一次请求会继续创建新的下载任务。
 
 下载副本按 `{downloadDir}/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 落盘。旧版平铺下载文件不会自动迁移。
 
@@ -180,13 +194,13 @@
 
 `success` 仅表示服务端下载任务完成，不返回下载目录中的物理路径或文件存在状态。
 
-文件列表中的 `localFileAvailable` 是后端根据下载目录实时计算的操作控制字段：为 `true` 时前端允许释放本地副本并禁用再次下载。该字段不包含或展示物理路径。
+下载任务开始后状态为 `downloading`，完成后为 `success`，失败后为 `failed`。文件列表中的 `downloadable` 是上述服务端资格规则的结果；`localFileAvailable` 则是后端根据下载目录实时计算的操作控制字段。其为 `true` 时前端允许释放本地副本并禁用再次下载；两个字段均不包含或展示物理路径。
 
 ### 14. 释放本地文件
 
 `POST /categories/{category}/files/release-local/{fileKey}`
 
-删除下载目录中的本地副本并清空下载任务状态；目标文件已不存在时仍按成功处理。
+删除下载目录中的常规本地副本并清空下载任务状态；目标文件已不存在时仍按成功处理。目标路径不是常规文件时请求失败，避免误删目录或链接。
 
 下载任务进行中时返回 `409 Conflict`。
 
