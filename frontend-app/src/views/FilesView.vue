@@ -329,12 +329,13 @@
     <!-- 分配分组 Dialog -->
     <el-dialog v-model="assignVisible" title="分配分组" width="360px">
       <el-select v-model="assignGroupCode" placeholder="选择目标分组" style="width:100%">
+        <el-option label="未分组" :value="null" />
         <el-option v-for="g in store.groups" :key="g.groupCode" :label="g.groupName" :value="g.groupCode" />
       </el-select>
       <p class="mt-8 text-muted small">已选 {{ store.selectedKeys.size }} 个文件</p>
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!assignGroupCode" :loading="assignLoading" @click="doAssign">确认分配</el-button>
+        <el-button type="primary" :disabled="assignGroupCode === undefined" :loading="assignLoading" @click="doAssign">确认</el-button>
       </template>
     </el-dialog>
 
@@ -391,7 +392,7 @@ const groupFilter = ref<GroupFilter>('all')
 const uploadVisible = ref(false)
 const assignVisible = ref(false)
 const assignLoading = ref(false)
-const assignGroupCode = ref('')
+const assignGroupCode = ref<string | null | undefined>(undefined)
 const previewVisible = ref(false)
 const previewFile = ref<FileItem | null>(null)
 const syncLoading = ref(false)
@@ -644,16 +645,17 @@ async function doReupload() {
 
 function openAssign() {
   if (!store.selectedKeys.size) { ElMessage.warning('请先选择文件'); return }
-  assignGroupCode.value = ''
+  assignGroupCode.value = undefined
   assignVisible.value = true
 }
 
 async function doAssign() {
-  if (!assignGroupCode.value) return
+  if (assignGroupCode.value === undefined) return
   assignLoading.value = true
   try {
-    await store.assignToGroup(assignGroupCode.value)
-    assignVisible.value = false
+    if (await store.assignToGroup(assignGroupCode.value)) {
+      assignVisible.value = false
+    }
   } finally {
     assignLoading.value = false
   }

@@ -55,8 +55,8 @@ export const getUnfreezeStatus = (category: string, fileKey: string) =>
 export const releaseLocal = (category: string, fileKey: string) =>
   client.post(`/categories/${category}/files/release-local/${fileKey}`)
 
-export const assignFilesToGroup = (category: string, groupCode: string, fileKeys: string[]) =>
-  client.post(`/categories/${category}/groups/${groupCode}/files:assign`, { fileKeys, operator: 'ui' })
+export const assignFilesToGroup = (category: string, groupCode: string | null, fileKeys: string[]) =>
+  client.post(`/categories/${category}/files:assign-group`, { fileKeys, groupCode })
 
 export const uploadFile = (
   category: string,

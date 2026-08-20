@@ -20,26 +20,18 @@
 
 ### 3. 分组分配文件
 
-`POST /categories/{category}/groups/{groupId}/files:assign`
+`POST /categories/{category}/files:assign-group`
 
 请求体：
 
 ```json
 {
   "fileKeys": ["key1", "key2"],
-  "operator": "admin"
+  "groupCode": "PROJECT_A"
 }
 ```
 
-### 4. 分组迁移文件
-
-`POST /categories/{category}/groups/{groupId}/files:move`
-
-请求体同上。
-
-> Deprecated：该接口为兼容别名，前端统一使用 `files:assign`。
-
-若任一文件存在本地下载副本或正在下载，分组分配返回 `409 Conflict`。请先释放本地副本或等待下载结束。
+`groupCode: null` 表示移至未分组。已下载文件会在请求内同步移动到目标分组目录；本地副本不阻止改组。任一文件正在下载时，整个请求返回 `409 Conflict`。任一文件不存在、已删除或不属于当前分类时，整个请求返回 `400 Bad Request`，不会部分成功。
 
 ## 分类/分组管理（管理员）
 
@@ -79,7 +71,7 @@
 
 `DELETE /category-admin/categories/{categoryCode}/groups/{groupId}`
 
-分组内任一文件存在本地下载副本或正在下载时，删除分组返回 `409 Conflict`。
+删除分组会同步将已下载副本移动至 `_ungrouped`，并清除成员分组。仅当任一成员正在下载时返回 `409 Conflict`。
 
 ## 文件管理
 

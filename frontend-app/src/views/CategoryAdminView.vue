@@ -180,6 +180,7 @@ const catLoading = ref(false)
 const groups = ref<Group[]>([])
 const groupLoading = ref(false)
 const selectedCat = ref('')
+let groupRequestId = 0
 
 const selectedCategory = computed(() => categories.value.find(c => c.code === selectedCat.value) || null)
 
@@ -227,19 +228,25 @@ async function applyRouteIntent() {
 
 async function loadGroups() {
   if (!selectedCat.value) { groups.value = []; return }
+  const requestId = ++groupRequestId
+  const categoryCode = selectedCat.value
   groupLoading.value = true
   try {
-    const res = await catApi.adminGetGroups(selectedCat.value)
+    const res = await catApi.adminGetGroups(categoryCode)
+    if (requestId !== groupRequestId || categoryCode !== selectedCat.value) return
     groups.value = res.data || []
   } catch (e: any) {
+    if (requestId !== groupRequestId || categoryCode !== selectedCat.value) return
+    groups.value = []
     ElMessage.error(e.response?.data?.error ?? '加载分组失败')
   } finally {
-    groupLoading.value = false
+    if (requestId === groupRequestId) groupLoading.value = false
   }
 }
 
 function selectCategory(code: string) {
   selectedCat.value = code
+  groups.value = []
   loadGroups()
 }
 

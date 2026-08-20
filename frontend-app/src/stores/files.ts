@@ -31,6 +31,8 @@ export const useFilesStore = defineStore('files', () => {
   const unfreezeStates = ref<Map<string, UnfreezeState>>(new Map())
   const reuploadStates = ref<Map<string, ReuploadState>>(new Map())
   const taskRunId = ref(0)
+  let metaRequestId = 0
+  let filesRequestId = 0
 
   const totalPages = computed(() => Math.ceil(total.value / PAGE_SIZE))
   const hasPendingDelete = computed(() => files.value.some(f => f.status === 'TO_BE_DELETED'))
@@ -47,6 +49,10 @@ export const useFilesStore = defineStore('files', () => {
   async function init(cat: string) {
     cleanupTasks()
     category.value = cat
+    categoryMeta.value = null
+    groups.value = []
+    files.value = []
+    total.value = 0
     keyword.value = ''
     groupFilter.value = GROUP_FILTER_ALL
     currentPage.value = 1
@@ -62,39 +68,52 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function loadMeta() {
+    const requestId = ++metaRequestId
+    const requestedCategory = category.value
     try {
       const [catRes, groupRes] = await Promise.all([
         categoriesApi.getCategories(),
-        categoriesApi.getCategoryGroups(category.value),
+        categoriesApi.getCategoryGroups(requestedCategory),
       ])
-      categoryMeta.value = catRes.data.find(c => c.code === category.value) || null
+      if (requestId !== metaRequestId || requestedCategory !== category.value) return
+      categoryMeta.value = catRes.data.find(c => c.code === requestedCategory) || null
       groups.value = groupRes.data || []
     } catch (e: any) {
+      if (requestId !== metaRequestId || requestedCategory !== category.value) return
+      categoryMeta.value = null
+      groups.value = []
       ElMessage.error(e.response?.data?.error ?? '获取分类信息失败')
     }
   }
 
   async function loadFiles(page = 1) {
     if (!category.value) return
+    const requestId = ++filesRequestId
+    const requestedCategory = category.value
+    const requestedKeyword = keyword.value.trim()
+    const requestedGroupFilter = groupFilter.value
     currentPage.value = page
     isLoading.value = true
     try {
       const params: any = { page: page - 1, pageSize: PAGE_SIZE }
-      if (keyword.value.trim()) params.keyword = keyword.value.trim()
-      if (groupFilter.value === GROUP_FILTER_UNGROUPED) params.ungroupedOnly = true
-      else if (groupFilter.value !== GROUP_FILTER_ALL) params.groupCode = groupFilter.value
+      if (requestedKeyword) params.keyword = requestedKeyword
+      if (requestedGroupFilter === GROUP_FILTER_UNGROUPED) params.ungroupedOnly = true
+      else if (requestedGroupFilter !== GROUP_FILTER_ALL) params.groupCode = requestedGroupFilter
 
-      const res = await filesApi.listFiles(category.value, params)
+      const res = await filesApi.listFiles(requestedCategory, params)
       const data: FilePage = res.data
+      if (requestId !== filesRequestId || requestedCategory !== category.value
+          || requestedKeyword !== keyword.value.trim() || requestedGroupFilter !== groupFilter.value) return
       files.value = data.files || []
       total.value = data.total || 0
       currentPage.value = (data.page ?? page - 1) + 1
       selectedKeys.value.clear()
       resumeActiveTasks()
     } catch (e: any) {
+      if (requestId !== filesRequestId || requestedCategory !== category.value) return
       ElMessage.error(e.response?.data?.error ?? '获取文件列表失败')
     } finally {
-      isLoading.value = false
+      if (requestId === filesRequestId) isLoading.value = false
     }
   }
 
@@ -323,15 +342,17 @@ export const useFilesStore = defineStore('files', () => {
     }
   }
 
-  async function assignToGroup(targetGroupCode: string) {
-    if (!selectedKeys.value.size) { ElMessage.warning('请先勾选文件'); return }
+  async function assignToGroup(targetGroupCode: string | null) {
+    if (!selectedKeys.value.size) { ElMessage.warning('请先勾选文件'); return false }
     try {
       await filesApi.assignFilesToGroup(category.value, targetGroupCode, selectedList.value)
-      ElMessage.success('批量分配成功')
+      ElMessage.success(targetGroupCode == null ? '已移至未分组' : '批量分配成功')
       selectedKeys.value.clear()
       await loadFiles(1)
+      return true
     } catch (e: any) {
       ElMessage.error(e.response?.data?.error ?? '批量分配失败')
+      return false
     }
   }
 
