@@ -77,13 +77,21 @@
 
 ### 5. 获取文件列表
 
-`GET /categories/{category}/files?page=0&pageSize=50&groupId=1`
+`GET /categories/{category}/files?page=0&pageSize=50&groupCode=GROUP_A`
 
-`groupId` 可选，不传则为分类内全部文件。
+`groupCode` 可选，不传则为分类内全部文件；`ungroupedOnly=true` 仅返回未分组文件。
 
 `keyword` 可选，传入后按文件名模糊搜索，例如：
 
-`GET /categories/{category}/files?page=0&pageSize=50&groupId=1&keyword=abc`
+`GET /categories/{category}/files?page=0&pageSize=50&groupCode=GROUP_A&keyword=abc`
+
+列表支持有序的重复 `sort` 参数，用于表头多级排序：
+
+`GET /categories/{category}/files?page=0&pageSize=50&sort=updateTime:desc&sort=fileName:asc`
+
+文件始终按分组展示：未分组优先，随后按管理端的 `sortOrder` 和分组 ID 排列。支持的组内排序字段为 `updateTime`、`fileName`、`size`；方向为 `asc` 或 `desc`，最多三条且字段不能重复。未传排序规则时，每个分组内保持 `id desc` 的默认顺序。
+
+文件列表通过文件名、云端存储大小和更新时间表头直接管理组内排序：普通点击将该列设为唯一的一级规则，再次点击切换方向；`Shift + 点击`会追加次级规则，或让已有规则在升序、降序和移除之间循环。分组列仅展示固定分组，不参与排序。表头数字表示排序优先级。
 
 ### 6. 搜索文件
 

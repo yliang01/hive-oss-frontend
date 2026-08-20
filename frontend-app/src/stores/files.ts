@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as filesApi from '@/api/files'
 import * as categoriesApi from '@/api/categories'
-import type { FileItem, FilePage, Category, Group, DownloadState, UnfreezeState, ReuploadState, GroupFilter } from '@/types'
+import type { FileItem, FilePage, Category, Group, DownloadState, UnfreezeState, ReuploadState, GroupFilter, FileSortField, FileSortRule } from '@/types'
 
 const PAGE_SIZE = 50
 const GROUP_FILTER_ALL = 'all'
@@ -25,6 +25,7 @@ export const useFilesStore = defineStore('files', () => {
   const groupFilter = ref<GroupFilter>(GROUP_FILTER_ALL)
   const isLoading = ref(false)
   const viewMode = ref<'list' | 'grid'>('list')
+  const sortRules = ref<FileSortRule[]>([])
 
   const selectedKeys = ref<Set<string>>(new Set())
   const downloadStates = ref<Map<string, DownloadState>>(new Map())
@@ -55,6 +56,7 @@ export const useFilesStore = defineStore('files', () => {
     total.value = 0
     keyword.value = ''
     groupFilter.value = GROUP_FILTER_ALL
+    sortRules.value = []
     currentPage.value = 1
     selectedKeys.value.clear()
     await Promise.all([loadMeta(), loadFiles(1)])
@@ -92,10 +94,11 @@ export const useFilesStore = defineStore('files', () => {
     const requestedCategory = category.value
     const requestedKeyword = keyword.value.trim()
     const requestedGroupFilter = groupFilter.value
+    const requestedSortRules = sortRules.value.map(rule => `${rule.field}:${rule.direction}`).join(',')
     currentPage.value = page
     isLoading.value = true
     try {
-      const params: any = { page: page - 1, pageSize: PAGE_SIZE }
+      const params: any = { page: page - 1, pageSize: PAGE_SIZE, sortRules: sortRules.value }
       if (requestedKeyword) params.keyword = requestedKeyword
       if (requestedGroupFilter === GROUP_FILTER_UNGROUPED) params.ungroupedOnly = true
       else if (requestedGroupFilter !== GROUP_FILTER_ALL) params.groupCode = requestedGroupFilter
@@ -103,7 +106,8 @@ export const useFilesStore = defineStore('files', () => {
       const res = await filesApi.listFiles(requestedCategory, params)
       const data: FilePage = res.data
       if (requestId !== filesRequestId || requestedCategory !== category.value
-          || requestedKeyword !== keyword.value.trim() || requestedGroupFilter !== groupFilter.value) return
+          || requestedKeyword !== keyword.value.trim() || requestedGroupFilter !== groupFilter.value
+          || requestedSortRules !== sortRules.value.map(rule => `${rule.field}:${rule.direction}`).join(',')) return
       files.value = data.files || []
       total.value = data.total || 0
       currentPage.value = (data.page ?? page - 1) + 1
@@ -376,6 +380,29 @@ export const useFilesStore = defineStore('files', () => {
     loadFiles(1)
   }
 
+  function changeSort(field: FileSortField, append: boolean) {
+    const index = sortRules.value.findIndex(rule => rule.field === field)
+    if (!append) {
+      if (index === 0) {
+        sortRules.value[0].direction = sortRules.value[0].direction === 'asc' ? 'desc' : 'asc'
+      } else {
+        sortRules.value = [{ field, direction: defaultSortDirection(field) }]
+      }
+    } else if (index < 0) {
+      sortRules.value.push({ field, direction: defaultSortDirection(field) })
+    } else if (sortRules.value[index].direction === 'asc') {
+      sortRules.value[index].direction = 'desc'
+    } else {
+      sortRules.value.splice(index, 1)
+    }
+    selectedKeys.value.clear()
+    void loadFiles(1)
+  }
+
+  function defaultSortDirection(field: FileSortField) {
+    return field === 'updateTime' ? 'desc' : 'asc'
+  }
+
   function resumeActiveTasks() {
     const runId = taskRunId.value
     const taskCategory = category.value
@@ -393,12 +420,12 @@ export const useFilesStore = defineStore('files', () => {
 
   return {
     category, categoryMeta, groups,
-    files, total, currentPage, keyword, groupFilter, isLoading, viewMode,
+    files, total, currentPage, keyword, groupFilter, isLoading, viewMode, sortRules,
     selectedKeys, downloadStates, unfreezeStates, reuploadStates,
     totalPages, hasPendingDelete, selectedList, isImageVariant, isArchiveVariant, effectiveViewMode,
     init, loadFiles, loadMeta, refreshFiles,
     deleteFiles, confirmDeleteAll, cleanupLocal, syncRemote, refreshPage,
     downloadFile, unfreezeFile, reuploadLocal, releaseLocal, assignToGroup,
-    toggleSelect, setViewMode, setKeyword, setGroupFilter, cleanupTasks,
+    toggleSelect, setViewMode, setKeyword, setGroupFilter, changeSort, cleanupTasks,
   }
 })

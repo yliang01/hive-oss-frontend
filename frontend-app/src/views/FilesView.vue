@@ -139,6 +139,7 @@
           size="small"
           stripe
           style="width: 100%"
+          :span-method="groupCellSpan"
           @selection-change="onSelectionChange"
         >
           <el-table-column type="expand" width="32">
@@ -156,12 +157,23 @@
           <el-table-column type="selection" width="40" />
 
           <el-table-column label="文件名" min-width="160">
+            <template #header>
+              <button class="sort-header" title="点击排序，Shift + 点击添加次级排序" @click="onSortHeader('fileName', $event)">
+                文件名 <span v-if="sortLabel('fileName')" class="sort-indicator">{{ sortLabel('fileName') }}</span>
+              </button>
+            </template>
             <template #default="{ row }">
               <HighlightedText :title="row.fileName" class="truncated-name" :text="row.fileName" :keyword="store.keyword" />
             </template>
           </el-table-column>
 
-          <el-table-column label="云端存储大小" width="120" :formatter="(r) => formatSize(r.size)" />
+          <el-table-column label="云端存储大小" width="120" :formatter="(r) => formatSize(r.size)">
+            <template #header>
+              <button class="sort-header" title="点击排序，Shift + 点击添加次级排序" @click="onSortHeader('size', $event)">
+                云端存储大小 <span v-if="sortLabel('size')" class="sort-indicator">{{ sortLabel('size') }}</span>
+              </button>
+            </template>
+          </el-table-column>
           <el-table-column label="同步状态" width="140">
             <template #default="{ row }">
               <el-tag size="small" :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
@@ -181,14 +193,20 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="分组" width="120">
+          <el-table-column prop="groupName" label="分组" width="120">
             <template #default="{ row }">
               <el-tag size="small" :type="row.groupCode ? 'primary' : 'info'" effect="plain">
-                {{ row.groupName || '未分组' }}
+                {{ row.groupName || '未分组' }}（{{ groupRowCount(row) }}）
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="更新时间" width="140" :formatter="(r) => formatDate(r.updateTime)" />
+          <el-table-column label="更新时间" width="140" :formatter="(r) => formatDate(r.updateTime)">
+            <template #header>
+              <button class="sort-header" title="点击排序，Shift + 点击添加次级排序" @click="onSortHeader('updateTime', $event)">
+                更新时间 <span v-if="sortLabel('updateTime')" class="sort-indicator">{{ sortLabel('updateTime') }}</span>
+              </button>
+            </template>
+          </el-table-column>
           <el-table-column v-if="store.categoryMeta?.storageClass === 'ARCHIVE'" label="解冻时间" width="140">
             <template #default="{ row }">{{ row.unfreezeTime ? formatDate(row.unfreezeTime) : '-' }}</template>
           </el-table-column>
@@ -263,9 +281,11 @@
 
       <!-- 文件网格 (grid 视图) -->
       <div v-else class="grid-section">
-        <div class="files-grid">
+        <section v-for="section in gridSections" :key="section.key" class="grid-group">
+          <h2 v-if="section.label" class="grid-group-title">{{ section.label }}（{{ section.files.length }}）</h2>
+          <div class="files-grid">
           <div
-            v-for="file in store.files"
+            v-for="file in section.files"
             :key="file.fileKey"
             class="grid-card"
             :class="{ selected: store.selectedKeys.has(file.fileKey) }"
@@ -308,7 +328,8 @@
               >{{ reuploadLabel(file.fileKey) }}</el-button>
             </div>
           </div>
-        </div>
+          </div>
+        </section>
         <el-empty v-if="!store.files.length && !store.isLoading" description="暂无文件" />
       </div>
 
@@ -381,7 +402,7 @@ import UploadModal from '@/components/UploadModal.vue'
 import PreviewModal from '@/components/PreviewModal.vue'
 import HighlightedText from '@/components/HighlightedText.vue'
 import { formatSize, formatDate } from '@/utils/format'
-import type { FileItem, GroupFilter } from '@/types'
+import type { FileItem, FileSortField, GroupFilter } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -404,6 +425,20 @@ const reuploadFile = ref<FileItem | null>(null)
 const selectedDeletableKeys = computed(() => store.files
   .filter(file => file.deletable && file.status !== 'DB_ONLY' && store.selectedKeys.has(file.fileKey))
   .map(file => file.fileKey))
+
+const gridSections = computed(() => {
+  const sections: Array<{ key: string, label: string, files: FileItem[] }> = []
+  for (const file of store.files) {
+    const key = file.groupCode || '_ungrouped'
+    const last = sections[sections.length - 1]
+    if (!last || last.key !== key) {
+      sections.push({ key, label: file.groupName || '未分组', files: [file] })
+    } else {
+      last.files.push(file)
+    }
+  }
+  return sections
+})
 
 const syncStatusClass = computed(() => {
   if (syncLoading.value) return 'sync-compact--running'
@@ -611,6 +646,33 @@ function doSearch() {
 
 function onGroupChange(val: GroupFilter) {
   store.setGroupFilter(val)
+}
+
+function onSortHeader(field: FileSortField, event: MouseEvent) {
+  store.changeSort(field, event.shiftKey)
+}
+
+function sortLabel(field: FileSortField) {
+  const index = store.sortRules.findIndex(rule => rule.field === field)
+  if (index < 0) return ''
+  return `${index + 1}${store.sortRules[index].direction === 'asc' ? ' ↑' : ' ↓'}`
+}
+
+function groupKey(file: FileItem) {
+  return file.groupCode || '_ungrouped'
+}
+
+function groupRowCount(file: FileItem) {
+  return store.files.filter(candidate => groupKey(candidate) === groupKey(file)).length
+}
+
+function groupCellSpan({ row, rowIndex, column }: any): [number, number] {
+  if (column.property !== 'groupName') return [1, 1]
+  const key = groupKey(row)
+  if (rowIndex > 0 && groupKey(store.files[rowIndex - 1]) === key) return [0, 0]
+  let span = 1
+  while (rowIndex + span < store.files.length && groupKey(store.files[rowIndex + span]) === key) span++
+  return [span, 1]
 }
 
 function goCreateGroup() {
@@ -866,6 +928,22 @@ onUnmounted(() => {
   margin-bottom: 6px;
 }
 .truncated-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+.sort-header:hover { color: var(--hive-primary); }
+.sort-header:focus-visible { outline: 2px solid var(--hive-primary); outline-offset: 2px; border-radius: 3px; }
+.sort-indicator { color: var(--hive-primary); font-size: 0.72rem; font-weight: 800; white-space: nowrap; }
 .action-cell { display: flex; flex-direction: column; gap: 4px; }
 .action-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .grid-section {
@@ -880,6 +958,8 @@ onUnmounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 16px;
 }
+.grid-group + .grid-group { margin-top: 22px; }
+.grid-group-title { margin: 0 0 10px; color: var(--hive-text); font-size: 0.9rem; font-weight: 800; }
 .grid-card {
   border-radius: 16px;
   border: 2px solid transparent;

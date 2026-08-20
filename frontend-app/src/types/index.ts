@@ -49,6 +49,14 @@ export interface FileItem {
   mimeType?: string
 }
 
+export type FileSortField = 'updateTime' | 'fileName' | 'size'
+export type FileSortDirection = 'asc' | 'desc'
+
+export interface FileSortRule {
+  field: FileSortField
+  direction: FileSortDirection
+}
+
 export interface FilePage {
   files: FileItem[]
   total: number

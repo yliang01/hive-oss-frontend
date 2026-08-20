@@ -1,5 +1,5 @@
 import client from './client'
-import type { FileItem, FilePage, SyncResult, LocalReuploadStart, LocalReuploadTaskStatus, DownloadTaskStatus, UnfreezeTaskStatus } from '@/types'
+import type { FileItem, FilePage, SyncResult, LocalReuploadStart, LocalReuploadTaskStatus, DownloadTaskStatus, UnfreezeTaskStatus, FileSortRule } from '@/types'
 
 export const listFiles = (category: string, params: {
   page: number
@@ -7,7 +7,18 @@ export const listFiles = (category: string, params: {
   groupCode?: string
   ungroupedOnly?: boolean
   keyword?: string
-}) => client.get<FilePage>(`/categories/${category}/files`, { params })
+  sortRules?: FileSortRule[]
+}) => {
+  const query = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+  })
+  if (params.groupCode) query.set('groupCode', params.groupCode)
+  if (params.ungroupedOnly) query.set('ungroupedOnly', 'true')
+  if (params.keyword) query.set('keyword', params.keyword)
+  params.sortRules?.forEach(rule => query.append('sort', `${rule.field}:${rule.direction}`))
+  return client.get<FilePage>(`/categories/${category}/files`, { params: query })
+}
 
 export const batchGetFiles = (category: string, fileKeys: string[]) => {
   const params = new URLSearchParams()
