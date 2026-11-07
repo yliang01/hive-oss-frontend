@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../target/generated-resources/static',
+    outDir: process.env.VITE_OUT_DIR ?? '../target/generated-resources/static',
     emptyOutDir: true,
     sourcemap: false,
     chunkSizeWarningLimit: 600,
@@ -27,9 +27,8 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/categories': 'http://localhost:8080',
-      '/db-backup': 'http://localhost:8080',
-      '/category-admin': 'http://localhost:8080',
+      '/setup': 'http://localhost:8080',
+      '/api': 'http://localhost:8080',
     },
   },
 });

@@ -6,6 +6,7 @@
           <div class="ops-kicker">Hive Cloud Ops</div>
           <h1 class="ops-title">OSS 管理控制台</h1>
         </div>
+        <div><el-button @click="$router.push('/setup')">配置与启动</el-button><el-button @click="$router.push('/admin/release')">发布程序目录</el-button></div>
       </header>
 
       <div class="metric-grid">
