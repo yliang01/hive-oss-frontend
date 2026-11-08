@@ -25,8 +25,11 @@ export const useBackupStore = defineStore('backup', () => {
   const isRestoreRunning = ref(false)
   const isDeleteRunning = ref(false)
   const isLoading = ref(false)
+  const isCheckingRestartedRestore = ref(false)
 
-  const actionsDisabled = computed(() => isRestoreRunning.value || isDeleteRunning.value)
+  const actionsDisabled = computed(() =>
+    isRestoreRunning.value || isDeleteRunning.value || taskStatus.value?.state === 'restart-needed'
+  )
 
   async function loadBackupList() {
     isLoading.value = true
@@ -87,6 +90,7 @@ export const useBackupStore = defineStore('backup', () => {
         pollAttempts: 0, elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000), state: 'running',
       }
       await pollAck(batchId, startedAt, 'RESTORE')
+      if (taskStatus.value?.state === 'restart-needed') return
       ElMessage.success('数据库已恢复')
       await loadBackupList()
     } catch (e: any) {
@@ -150,5 +154,36 @@ export const useBackupStore = defineStore('backup', () => {
     throw new Error('轮询超时，请稍后手动确认结果')
   }
 
-  return { backupList, taskStatus, isBackupRunning, isRestoreRunning, isDeleteRunning, isLoading, actionsDisabled, loadBackupList, startBackup, startRestore, deleteBackup }
+  async function checkRestartedRestore() {
+    const pendingRestore = taskStatus.value
+    if (pendingRestore?.taskType !== 'RESTORE'
+      || pendingRestore.state !== 'restart-needed'
+      || isCheckingRestartedRestore.value) return
+
+    isCheckingRestartedRestore.value = true
+    try {
+      const res = await backupApi.getBackupAck(pendingRestore.batchId)
+      const status = (res.data?.status || '').toUpperCase()
+      // After restart the in-memory tracker is gone; a ready business API means startup applied the pending H2 restore.
+      if (status === 'UPLOADED' || status === 'RESTORED') {
+        taskStatus.value = {
+          ...pendingRestore,
+          phase: PHASE.RESTORED,
+          detail: '后端已重启，H2 备份已应用',
+          state: 'success',
+        }
+        ElMessage.success('H2 数据库恢复已应用')
+        await loadBackupList()
+      }
+    } catch {
+      // Keep waiting while the backend is restarting or business APIs are unavailable.
+    } finally {
+      isCheckingRestartedRestore.value = false
+    }
+  }
+
+  return {
+    backupList, taskStatus, isBackupRunning, isRestoreRunning, isDeleteRunning, isLoading,
+    actionsDisabled, loadBackupList, startBackup, startRestore, deleteBackup, checkRestartedRestore,
+  }
 })

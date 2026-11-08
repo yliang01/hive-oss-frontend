@@ -239,6 +239,7 @@ onMounted(() => {
   store.loadBackupList()
   taskTimer = window.setInterval(() => {
     if (store.taskStatus) taskUpdatedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    if (store.taskStatus?.state === 'restart-needed') void store.checkRestartedRestore()
   }, 2000)
 })
 
